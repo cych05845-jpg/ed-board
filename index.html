@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="robots" content="noindex,nofollow">
+<title>急診必看板 ed-board</title>
+<style>
+  :root{
+    --blue:#1d6fa5; --blue-d:#155a86; --teal:#0e7c7b;
+    --bg:#f4f6f8; --card:#fff; --line:#e3e8ee; --ink:#1f2d3d; --muted:#6b7c8f;
+    --urgent:#d64545; --pin:#b8860b; --ok:#2f9e44; --warn:#fff7e6;
+    --shadow:0 1px 3px rgba(0,0,0,.08);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{margin:0;font-family:"Microsoft JhengHei","微軟正黑體",system-ui,sans-serif;
+    background:var(--bg);color:var(--ink);font-size:16px;line-height:1.55;}
+  .hidden{display:none!important;}
+  header{position:sticky;top:0;z-index:20;background:var(--blue);color:#fff;
+    padding:12px 16px;display:flex;align-items:center;justify-content:space-between;box-shadow:var(--shadow);}
+  header .t{font-size:18px;font-weight:700;}
+  header .who{font-size:13px;opacity:.95;}
+  .btn{border:none;border-radius:10px;padding:11px 16px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;}
+  .btn-pri{background:var(--blue);color:#fff;}
+  .btn-pri:active{background:var(--blue-d);}
+  .btn-ghost{background:#eef2f6;color:var(--ink);}
+  .btn-ok{background:var(--ok);color:#fff;}
+  .btn-warn{background:#fbe3e3;color:var(--urgent);}
+  .btn-sm{padding:7px 12px;font-size:13px;border-radius:8px;}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .wrap{max-width:680px;margin:0 auto;padding:14px;}
+  .login-box{max-width:380px;margin:8vh auto 0;background:var(--card);border-radius:16px;padding:28px 24px;box-shadow:var(--shadow);}
+  .login-box h1{font-size:20px;margin:0 0 4px;}
+  .login-box .sub{color:var(--muted);font-size:13px;margin-bottom:20px;}
+  label{display:block;font-size:13px;color:var(--muted);margin:14px 0 6px;}
+  input,select,textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;font-size:16px;font-family:inherit;background:#fff;}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);}
+  .login-box .btn{width:100%;margin-top:20px;padding:13px;}
+  .err{color:var(--urgent);font-size:13px;margin-top:10px;min-height:18px;}
+  .card{background:var(--card);border-radius:12px;padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow);cursor:pointer;border-left:4px solid transparent;}
+  .card.pinned{border-left-color:var(--pin);}
+  .card.urgent{border-left-color:var(--urgent);}
+  .card .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;}
+  .tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;}
+  .tag-cat{background:#e7f1f8;color:var(--blue-d);}
+  .tag-pin{background:#fbf0d6;color:var(--pin);}
+  .tag-urgent{background:#fbe3e3;color:var(--urgent);}
+  .tag-task{background:#e6f4ea;color:var(--ok);}
+  .card h3{margin:2px 0 6px;font-size:16px;}
+  .meta{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:8px;}
+  .read-yes{color:var(--ok);font-weight:700;}
+  .read-no{color:var(--urgent);font-weight:700;}
+  .section-h{font-size:13px;color:var(--muted);margin:18px 4px 8px;font-weight:700;}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;align-items:flex-end;justify-content:center;}
+  .modal{background:#fff;width:100%;max-width:680px;max-height:92vh;overflow-y:auto;border-radius:18px 18px 0 0;padding:20px;}
+  @media(min-width:680px){.modal-bg{align-items:center;}.modal{border-radius:18px;}}
+  .modal h2{font-size:19px;margin:0 0 4px;}
+  .modal .mmeta{font-size:12px;color:var(--muted);margin-bottom:14px;}
+  .content-box{background:#fafbfc;border:1px solid var(--line);border-radius:10px;padding:14px;font-size:15px;white-space:pre-wrap;word-break:break-word;min-height:60px;}
+  .modal-actions{display:flex;gap:10px;margin-top:16px;}
+  .modal-actions .btn{flex:1;padding:14px;}
+  .x{float:right;background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;}
+  .frozen-note{background:var(--warn);color:#8a6d00;font-size:13px;padding:8px 12px;border-radius:8px;margin-top:12px;}
+  .fab{position:fixed;right:18px;bottom:22px;z-index:30;background:var(--teal);color:#fff;border:none;border-radius:28px;padding:14px 20px;font-size:15px;font-weight:700;box-shadow:0 3px 10px rgba(0,0,0,.2);cursor:pointer;}
+  .row2{display:flex;gap:10px;}.row2>*{flex:1;}
+  .chk{display:flex;align-items:flex-start;gap:8px;margin-top:14px;font-size:14px;color:var(--ink);}
+  .chk input{width:auto;margin-top:3px;}
+  .stat-bar{height:10px;background:#eef2f6;border-radius:6px;overflow:hidden;margin:8px 0;}
+  .stat-fill{height:100%;background:var(--ok);}
+  .name-chip{display:inline-block;background:#eef2f6;border-radius:8px;padding:4px 9px;margin:3px 4px 0 0;font-size:13px;}
+  .name-chip.no{background:#fbe3e3;color:var(--urgent);}
+  .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#1f2d3d;color:#fff;padding:11px 18px;border-radius:10px;font-size:14px;z-index:99;opacity:0;transition:opacity .2s;pointer-events:none;}
+  .toast.show{opacity:.95;}
+  .empty{text-align:center;color:var(--muted);padding:40px 20px;font-size:14px;}
+  .spin{text-align:center;color:var(--muted);padding:30px;}
+  .staff-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;}
+  .staff-row .nm{font-weight:600;}
+  .staff-row .sub{font-size:12px;color:var(--muted);}
+  .badge{font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;margin-left:6px;}
+  .badge-nopin{background:#fff3cd;color:#8a6d00;}
+  .badge-off{background:#eee;color:#999;}
+  .badge-leader{background:#e7f1f8;color:var(--blue-d);}
+</style>
+</head>
+<body>
+
+<!-- ===== 登入 ===== -->
+<div id="loginScreen">
+  <div class="login-box">
+    <h1>急診必看板</h1>
+    <div class="sub">ed-board · 嘉基急診</div>
+    <div id="stepId">
+      <label>員工編號</label>
+      <input id="inStaffId" inputmode="numeric" placeholder="例如 05845" autocomplete="off">
+      <button class="btn btn-pri" onclick="doNext()">繼續</button>
+    </div>
+    <div id="stepPin" class="hidden">
+      <div style="font-size:15px;margin-bottom:4px;">您好,<b id="pinName"></b></div>
+      <label>請輸入 PIN 碼</label>
+      <input id="inPin" type="password" inputmode="numeric" maxlength="6" placeholder="4-6 碼" autocomplete="off">
+      <button class="btn btn-pri" onclick="doLogin()">登入</button>
+      <button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="backToId()">換編號</button>
+    </div>
+    <div id="stepSet" class="hidden">
+      <div style="font-size:15px;margin-bottom:4px;">首次登入,<b id="setName"></b></div>
+      <div class="sub" style="margin:4px 0 0;">請設定一組 4-6 碼 PIN,日後用來登入</div>
+      <label>設定 PIN</label>
+      <input id="inPin1" type="password" inputmode="numeric" maxlength="6" autocomplete="off">
+      <label>再輸入一次</label>
+      <input id="inPin2" type="password" inputmode="numeric" maxlength="6" autocomplete="off">
+      <button class="btn btn-pri" onclick="doSetPin()">設定並登入</button>
+      <button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="backToId()">換編號</button>
+    </div>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- ===== 主畫面 ===== -->
+<div id="appScreen" class="hidden">
+  <header>
+    <div><div class="t">急診必看板</div></div>
+    <div style="text-align:right;">
+      <div class="who" id="hdrWho"></div>
+      <div style="margin-top:4px;display:flex;gap:6px;justify-content:flex-end;">
+        <button id="btnStaff" class="btn btn-sm btn-ghost hidden" style="color:#1f2d3d;" onclick="openStaffMgr()">👥 員工</button>
+        <button class="btn btn-sm btn-ghost" style="color:#1f2d3d;" onclick="logout()">登出</button>
+      </div>
+    </div>
+  </header>
+  <div class="wrap"><div id="noticeList"><div class="spin">載入中…</div></div></div>
+  <button id="fabPublish" class="fab hidden" onclick="openPublish()">＋ 發佈公告</button>
+</div>
+
+<div id="modalRoot"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ====== 設定 ====== */
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzD6dHsZpK3hpmAvV77tP5Eco2vssBIjbh_xBU3HfGco9vima5wEIU_sSKyZlaAfZSeGg/exec';
+const SESSION_DAYS = 30;
+const CATEGORIES = ['感控','儀器','SOP','事件','教育','行政','協尋','任務'];
+const SHIFTS = [['day','白班'],['evening','小夜'],['night','大夜'],['admin','行政']];
+const ROLES  = [['rn','護理師'],['leader','護理長/Leader']];
+
+/* ====== 狀態 ====== */
+let session = null;
+let pendingId = '';
+
+/* ====== 工具 ====== */
+async function api(action, payload){
+  if(GAS_URL.indexOf('PASTE_')===0){ alert('尚未設定 GAS_URL'); throw 'NO_URL'; }
+  const body = Object.assign({action}, payload||{});
+  if(session && session.token) body.token = session.token;
+  const r = await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
+  const data = await r.json();
+  if(data && (data.error==='NO_AUTH' || data.error==='EXPIRED')){ authFail(); throw 'AUTH'; }
+  return data;
+}
+function authFail(){ localStorage.removeItem('edboard_session'); session=null; toast('登入已過期,請重新登入'); setTimeout(()=>location.reload(),1200); }
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function nl2br(s){return esc(s).replace(/\n/g,'<br>');}
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800);}
+function show(id){document.getElementById(id).classList.remove('hidden');}
+function hide(id){document.getElementById(id).classList.add('hidden');}
+function err(m){document.getElementById('loginErr').textContent=m||'';}
+function shiftLabel(v){const f=SHIFTS.find(x=>x[0]===v);return f?f[1]:(v||'');}
+function roleLabel(v){const f=ROLES.find(x=>x[0]===v);return f?f[1]:(v||'');}
+
+/* ====== Session ====== */
+function saveSession(s){ session=s; localStorage.setItem('edboard_session',JSON.stringify({...s,exp:Date.now()+SESSION_DAYS*86400000})); }
+function loadSession(){
+  try{const raw=localStorage.getItem('edboard_session');if(!raw)return null;
+    const s=JSON.parse(raw);
+    if(!s.token || !s.exp || s.exp<Date.now())return null;   // 沒 token(舊版)或過期 → 重登
+    return s;}catch(e){return null;}
+}
+async function logout(){ try{await api('logout');}catch(e){} localStorage.removeItem('edboard_session'); session=null; location.reload(); }
+
+/* ====== 登入流程 ====== */
+function backToId(){err('');hide('stepPin');hide('stepSet');show('stepId');}
+async function doNext(){
+  err('');
+  const id=document.getElementById('inStaffId').value.trim();
+  if(!id){err('請輸入員工編號');return;}
+  pendingId=id;
+  try{
+    const r=await api('rnLogin',{staff_id:id,pin:''});
+    if(r.needSetPin){document.getElementById('setName').textContent=r.staff_name||'';hide('stepId');show('stepSet');return;}
+    if(r.error==='NO_STAFF'){err('查無此員工編號,請洽護理長');return;}
+    if(r.error==='INACTIVE'){err('帳號未啟用');return;}
+    document.getElementById('pinName').textContent='';
+    hide('stepId');show('stepPin');document.getElementById('inPin').focus();
+  }catch(e){err('連線失敗,請稍後再試');}
+}
+async function doLogin(){
+  err('');
+  const pin=document.getElementById('inPin').value.trim();
+  if(pin.length<4){err('請輸入 PIN');return;}
+  try{
+    const r=await api('rnLogin',{staff_id:pendingId,pin});
+    if(!r.ok){err(r.msg||'登入失敗');return;}
+    saveSession({token:r.token,staff_id:r.staff_id,staff_name:r.staff_name,role:r.role,shift:r.shift});
+    enterApp();
+  }catch(e){err('連線失敗');}
+}
+async function doSetPin(){
+  err('');
+  const p1=document.getElementById('inPin1').value.trim();
+  const p2=document.getElementById('inPin2').value.trim();
+  if(p1.length<4||p1.length>6){err('PIN 需 4-6 碼');return;}
+  if(p1!==p2){err('兩次輸入不一致');return;}
+  try{
+    const r=await api('setPin',{staff_id:pendingId,pin:p1});
+    if(!r.ok){err(r.msg||'設定失敗');return;}
+    saveSession({token:r.token,staff_id:r.staff_id,staff_name:r.staff_name,role:r.role,shift:r.shift});
+    enterApp();
+  }catch(e){err('連線失敗');}
+}
+
+/* ====== 進入主畫面 ====== */
+function enterApp(){
+  hide('loginScreen');show('appScreen');
+  document.getElementById('hdrWho').textContent=session.staff_name+(session.role==='leader'?' · 護理長':'');
+  if(session.role==='leader'){show('fabPublish');show('btnStaff');}
+  loadNotices();
+}
+
+/* ====== 公告列表 ====== */
+async function loadNotices(){
+  const box=document.getElementById('noticeList');
+  box.innerHTML='<div class="spin">載入中…</div>';
+  try{
+    const r=await api('listActiveNotices',{});
+    const list=r.notices||[];
+    if(!list.length){box.innerHTML='<div class="empty">目前沒有公告</div>';return;}
+    box.innerHTML=list.map(cardHtml).join('');
+  }catch(e){if(e!=='AUTH')box.innerHTML='<div class="empty">載入失敗,請重整</div>';}
+}
+function cardHtml(n){
+  let cls='card';if(n.priority==='pinned')cls+=' pinned';if(n.priority==='urgent')cls+=' urgent';
+  let tags='';
+  if(n.priority==='pinned')tags+='<span class="tag tag-pin">📌 置頂</span>';
+  if(n.priority==='urgent')tags+='<span class="tag tag-urgent">緊急</span>';
+  if(n.is_task)tags+='<span class="tag tag-task">任務</span>';
+  tags+='<span class="tag tag-cat">'+esc(n.category)+'</span>';
+  const readHtml=n.read?'<span class="read-yes">✓ 已閱 '+esc(String(n.read_at).slice(5,16))+'</span>':'<span class="read-no">● 未閱</span>';
+  return '<div class="'+cls+'" onclick="openDetail(\''+n.id+'\')"><div class="top">'+tags+'</div><h3>'+esc(n.title)+'</h3>'+
+    '<div class="meta"><span>'+esc(n.created_by_name||'')+' · '+esc(String(n.created_at).slice(0,10))+'</span>'+readHtml+'</div></div>';
+}
+
+/* ====== 公告詳情 ====== */
+async function openDetail(id){
+  const root=document.getElementById('modalRoot');
+  root.innerHTML='<div class="modal-bg"><div class="modal"><div class="spin">載入中…</div></div></div>';
+  let r;
+  try{ r=await api('getNoticeDetail',{id}); }catch(e){ if(e!=='AUTH'){closeModal();toast('載入失敗');} return; }
+  if(!r.ok){closeModal();toast('找不到公告');return;}
+  const n=r.notice;
+  let tags='';
+  if(n.priority==='pinned')tags+='<span class="tag tag-pin">📌 置頂</span> ';
+  if(n.priority==='urgent')tags+='<span class="tag tag-urgent">緊急</span> ';
+  if(n.is_task)tags+='<span class="tag tag-task">任務</span> ';
+  tags+='<span class="tag tag-cat">'+esc(n.category)+'</span>';
+  let action;
+  if(n.read){
+    action='<button class="btn btn-ghost" disabled>✓ 已於 '+esc(String(n.read_at).slice(0,16))+' 閱讀</button>';
+    if(n.is_task && !n.task_done)action+='<button class="btn btn-ok" onclick="doRead(\''+n.id+'\',true)">我已完成此任務</button>';
+    else if(n.is_task && n.task_done)action='<button class="btn btn-ok" disabled>✓ 任務已完成</button>';
+  }else if(n.frozen){ action='<button class="btn btn-ghost" disabled>已超過有效已讀期</button>'; }
+  else{ action='<button class="btn btn-pri" onclick="doRead(\''+n.id+'\','+(n.is_task?'true':'false')+')">'+(n.is_task?'我已閱讀並完成':'我已閱讀')+'</button>'; }
+  let leaderBtn = session.role==='leader' ? '<button class="btn btn-ghost" onclick="openStats(\''+n.id+'\',\''+esc(n.title).replace(/\x27/g,"")+'\')">📊 已讀統計</button>' : '';
+  const frozenNote=n.frozen?'<div class="frozen-note">⚠ 此公告已超過有效已讀期('+esc(n.read_validity_days)+' 天),已讀名單已鎖定。</div>':'';
+  const taskNote=n.is_task&&n.task_deadline?'<div class="mmeta">任務截止:'+esc(n.task_deadline)+'</div>':'';
+  root.innerHTML='<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">'+
+    '<button class="x" onclick="closeModal()">×</button><div style="margin-bottom:8px;">'+tags+'</div>'+
+    '<h2>'+esc(n.title)+'</h2><div class="mmeta">'+esc(n.created_by_name||'')+' 發佈於 '+esc(n.created_at)+
+      (n.updated_at&&n.updated_at!==n.created_at?(' · 最後修改 '+esc(String(n.updated_at).slice(5,16))):'')+'</div>'+
+    taskNote+'<div class="content-box">'+nl2br(n.content)+'</div>'+
+    (n.note?'<div class="mmeta" style="margin-top:8px;">備註:'+esc(n.note)+'</div>':'')+
+    frozenNote+'<div class="modal-actions">'+action+leaderBtn+'</div></div></div>';
+}
+function closeModal(){document.getElementById('modalRoot').innerHTML='';}
+async function doRead(id,taskDone){
+  try{
+    const r=await api('markAsRead',{notice_id:id,user_agent:navigator.userAgent,task_done:taskDone});
+    if(!r.ok){toast(r.msg||'簽閱失敗');return;}
+    toast(taskDone?'已標記完成':'已簽閱 ✓');closeModal();loadNotices();
+  }catch(e){if(e!=='AUTH')toast('連線失敗');}
+}
+
+/* ====== Leader 發佈 ====== */
+function openPublish(){
+  const root=document.getElementById('modalRoot');
+  const opts=CATEGORIES.map(c=>'<option value="'+c+'">'+c+'</option>').join('');
+  const auds=[['all','全部'],['day','白班'],['evening','小夜'],['night','大夜']].map(a=>'<option value="'+a[0]+'">'+a[1]+'</option>').join('');
+  root.innerHTML='<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">'+
+    '<button class="x" onclick="closeModal()">×</button><h2>發佈公告</h2>'+
+    '<label>標題</label><input id="pTitle" placeholder="公告標題">'+
+    '<label>內容</label><textarea id="pContent" rows="6" placeholder="公告內容…"></textarea>'+
+    '<div class="row2"><div><label>分類</label><select id="pCat">'+opts+'</select></div>'+
+      '<div><label>重要性</label><select id="pPri"><option value="normal">一般</option><option value="urgent">緊急</option><option value="pinned">永久置頂</option></select></div></div>'+
+    '<div class="row2"><div><label>顯示期(天)</label><input id="pDisp" type="number" value="3"></div>'+
+      '<div><label>有效已讀期(天)</label><input id="pValid" type="number" value="14"></div></div>'+
+    '<label>對象</label><select id="pAud">'+auds+'</select>'+
+    '<div class="chk"><input type="checkbox" id="pTask"><label style="margin:0;color:var(--ink);" for="pTask">這是任務型公告(需追蹤完成)</label></div>'+
+    '<div id="pDeadlineWrap" class="hidden"><label>任務截止日</label><input id="pDeadline" type="date"></div>'+
+    '<div class="chk" style="background:var(--warn);padding:10px;border-radius:8px;"><input type="checkbox" id="pPhi"><label style="margin:0;color:#8a6d00;" for="pPhi">我已確認本公告內容<b>不含病人姓名、病歷號等個資(PHI)</b></label></div>'+
+    '<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-pri" onclick="doPublish()">發佈</button></div>'+
+    '<div class="err" id="pErr"></div></div></div>';
+  document.getElementById('pTask').addEventListener('change',function(){document.getElementById('pDeadlineWrap').classList.toggle('hidden',!this.checked);});
+}
+async function doPublish(){
+  const pe=document.getElementById('pErr');pe.textContent='';
+  const title=document.getElementById('pTitle').value.trim();
+  if(!title){pe.textContent='請輸入標題';return;}
+  if(!document.getElementById('pPhi').checked){pe.textContent='請先確認不含個資(PHI)';return;}
+  const isTask=document.getElementById('pTask').checked;
+  const payload={title,content:document.getElementById('pContent').value,category:document.getElementById('pCat').value,
+    priority:document.getElementById('pPri').value,is_task:isTask,
+    task_deadline:isTask?document.getElementById('pDeadline').value:'',
+    display_days:Number(document.getElementById('pDisp').value)||3,
+    read_validity_days:Number(document.getElementById('pValid').value)||14,
+    target_audience:document.getElementById('pAud').value};
+  try{
+    const r=await api('publishNotice',payload);
+    if(!r.ok){pe.textContent=r.error==='NOT_LEADER'?'權限不足':'發佈失敗';return;}
+    toast('已發佈 ✓');closeModal();loadNotices();
+  }catch(e){if(e!=='AUTH')pe.textContent='連線失敗';}
+}
+
+/* ====== Leader 已讀統計 ====== */
+async function openStats(id,title){
+  const root=document.getElementById('modalRoot');
+  root.innerHTML='<div class="modal-bg"><div class="modal"><div class="spin">統計中…</div></div></div>';
+  let r;
+  try{ r=await api('getNoticeStats',{notice_id:id}); }catch(e){ if(e!=='AUTH'){closeModal();toast('載入失敗');} return; }
+  if(!r.ok){closeModal();toast('權限不足或載入失敗');return;}
+  const pct=r.total?Math.round(r.read_count/r.total*100):0;
+  const readChips=r.read.map(s=>'<span class="name-chip">'+esc(s.staff_name)+(s.task_done?' ✓':'')+'</span>').join('')||'<span class="mmeta">尚無</span>';
+  const unreadChips=r.unread.map(s=>'<span class="name-chip no">'+esc(s.staff_name)+'</span>').join('')||'<span class="mmeta">全員已讀 🎉</span>';
+  root.innerHTML='<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">'+
+    '<button class="x" onclick="closeModal()">×</button><h2>已讀統計</h2><div class="mmeta">'+esc(title)+'</div>'+
+    '<div style="font-size:22px;font-weight:700;">'+r.read_count+' / '+r.total+'　<span style="font-size:15px;color:var(--muted);">('+pct+'%)</span></div>'+
+    '<div class="stat-bar"><div class="stat-fill" style="width:'+pct+'%"></div></div>'+
+    '<div class="section-h">已閱('+r.read_count+')</div><div>'+readChips+'</div>'+
+    '<div class="section-h">未閱('+r.unread_count+')</div><div>'+unreadChips+'</div>'+
+    '<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div></div></div>';
+}
+
+/* ====== Leader 員工管理 ====== */
+async function openStaffMgr(){
+  const root=document.getElementById('modalRoot');
+  root.innerHTML='<div class="modal-bg"><div class="modal"><div class="spin">載入中…</div></div></div>';
+  let r;
+  try{ r=await api('listStaff',{}); }catch(e){ if(e!=='AUTH'){closeModal();toast('載入失敗');} return; }
+  if(!r.ok){closeModal();toast('權限不足');return;}
+  renderStaffMgr(r.staff||[]);
+}
+function renderStaffMgr(staff){
+  const root=document.getElementById('modalRoot');
+  const rows=staff.map(s=>{
+    let badges='';
+    if(s.role==='leader')badges+='<span class="badge badge-leader">護理長</span>';
+    if(!s.has_pin)badges+='<span class="badge badge-nopin">未設PIN</span>';
+    if(!s.is_active)badges+='<span class="badge badge-off">停用</span>';
+    return '<div class="staff-row" onclick=\'openStaffEdit('+JSON.stringify(s).replace(/\x27/g,"&#39;")+')\'>'+
+      '<div><div class="nm">'+esc(s.staff_name)+badges+'</div>'+
+      '<div class="sub">'+esc(s.staff_id)+' · '+shiftLabel(s.shift)+'</div></div>'+
+      '<div style="color:var(--muted);">✎</div></div>';
+  }).join('')||'<div class="empty">尚無員工</div>';
+  root.innerHTML='<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">'+
+    '<button class="x" onclick="closeModal()">×</button><h2>員工管理</h2>'+
+    '<div class="mmeta">共 '+staff.length+' 人 · 點員工可編輯</div>'+
+    '<button class="btn btn-pri btn-sm" style="margin-bottom:12px;" onclick="openStaffEdit(null)">＋ 新增員工</button>'+
+    rows+'</div></div>';
+}
+function openStaffEdit(s){
+  const isNew=!s;
+  const shiftOpts=SHIFTS.map(x=>'<option value="'+x[0]+'"'+(s&&s.shift===x[0]?' selected':'')+'>'+x[1]+'</option>').join('');
+  const roleOpts=ROLES.map(x=>'<option value="'+x[0]+'"'+(s&&s.role===x[0]?' selected':'')+'>'+x[1]+'</option>').join('');
+  const root=document.getElementById('modalRoot');
+  root.innerHTML='<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">'+
+    '<button class="x" onclick="openStaffMgr()">×</button><h2>'+(isNew?'新增員工':'編輯員工')+'</h2>'+
+    '<label>員工編號</label><input id="sId" inputmode="numeric" value="'+(s?esc(s.staff_id):'')+'"'+(isNew?'':' disabled')+'>'+
+    '<label>姓名</label><input id="sName" value="'+(s?esc(s.staff_name):'')+'">'+
+    '<div class="row2"><div><label>班別</label><select id="sShift">'+shiftOpts+'</select></div>'+
+      '<div><label>角色</label><select id="sRole">'+roleOpts+'</select></div></div>'+
+    (isNew?'':'<label>狀態</label><select id="sActive"><option value="yes"'+(s.is_active?' selected':'')+'>在職</option><option value="no"'+(!s.is_active?' selected':'')+'>停用</option></select>')+
+    '<div class="modal-actions"><button class="btn btn-ghost" onclick="openStaffMgr()">取消</button><button class="btn btn-pri" onclick="saveStaff('+(isNew?'true':'false')+',\''+(s?esc(s.staff_id):'')+'\')">儲存</button></div>'+
+    (isNew?'':'<button class="btn btn-warn" style="width:100%;margin-top:10px;" onclick="doResetPin(\''+esc(s.staff_id)+'\',\''+esc(s.staff_name)+'\')">重設此人 PIN</button>'+
+      '<div class="mmeta" style="margin-top:6px;">重設後,該員工下次登入需重新自設 PIN。</div>')+
+    '<div class="err" id="sErr"></div></div></div>';
+}
+async function saveStaff(isNew,origId){
+  const se=document.getElementById('sErr');se.textContent='';
+  const staff_id=document.getElementById('sId').value.trim();
+  const staff_name=document.getElementById('sName').value.trim();
+  const shift=document.getElementById('sShift').value;
+  const role=document.getElementById('sRole').value;
+  if(!staff_name){se.textContent='請輸入姓名';return;}
+  try{
+    let r;
+    if(isNew){
+      if(!staff_id){se.textContent='請輸入員工編號';return;}
+      r=await api('addStaff',{staff_id,staff_name,shift,role});
+    }else{
+      const is_active=document.getElementById('sActive').value;
+      r=await api('updateStaff',{staff_id:origId,staff_name,shift,role,is_active});
+    }
+    if(!r.ok){se.textContent=r.msg||'儲存失敗';return;}
+    toast('已儲存 ✓');openStaffMgr();
+  }catch(e){if(e!=='AUTH')se.textContent='連線失敗';}
+}
+async function doResetPin(staff_id,name){
+  if(!confirm('確定要重設 '+name+' 的 PIN 嗎?\n重設後對方下次登入要重新設定。'))return;
+  try{
+    const r=await api('resetPin',{staff_id});
+    if(!r.ok){toast('重設失敗');return;}
+    toast(name+' 的 PIN 已重設');openStaffMgr();
+  }catch(e){if(e!=='AUTH')toast('連線失敗');}
+}
+
+/* ====== 啟動 ====== */
+(function init(){
+  const s=loadSession();
+  if(s){session=s;enterApp();}
+  document.getElementById('inStaffId').addEventListener('keydown',e=>{if(e.key==='Enter')doNext();});
+  document.getElementById('inPin').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+})();
+</script>
+</body>
+</html>
