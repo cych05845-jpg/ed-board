@@ -143,7 +143,7 @@
     </div>
   </header>
   <div class="wrap">
-    <div id="staleWarn" class="hidden stale">⚠ 偵測到後端不是最新版,內容與日期可能顯示異常。請到 Apps Script:<b>部署 → 管理部署作業 → ✏️ → 版本選「新版本」→ 部署</b>,再重整本頁。</div>
+    <div id="staleWarn" class="hidden stale">ℹ️ 目前以相容模式顯示內容(線上後端為舊版,載入稍慢)。有空時重新部署 Code.gs 可加速,但不影響使用。</div>
     <div id="searchWrap" class="hidden">
       <input id="searchBox" class="search" placeholder="🔍 關鍵字:標題、分類、發佈者…" oninput="onSearch()">
       <div class="daterow">
@@ -226,7 +226,15 @@ async function api(action, payload){
 function authFail(){ localStorage.removeItem('edboard_session'); session=null; toast('登入已過期,請重新登入'); setTimeout(()=>location.reload(),1200); }
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function nl2br(s){return esc(s).replace(/\n/g,'<br>');}
-function fmtDT(s){s=String(s||'');return s.length>=16?s.slice(5,16):s;}  // 06-18 08:30
+function fmtDT(s){
+  if(!s)return '';
+  s=String(s);
+  var m=s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if(m)return m[2]+'-'+m[3]+' '+m[4]+':'+m[5];
+  var d=new Date(s);
+  if(!isNaN(d.getTime())){var p=function(n){return String(n).padStart(2,'0');};return p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());}
+  return s.length>=16?s.slice(5,16):s;
+}
 function nowStr(){const d=new Date(),p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());}
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800);}
 function show(id){document.getElementById(id).classList.remove('hidden');}
@@ -302,11 +310,19 @@ async function loadNotices(){
   try{
     const r=await api('listActiveNotices',{});
     _notices=r.notices||[];
-    // 偵測後端版本:新版每則會帶 edited 欄位,舊版沒有
     const stale = _notices.length>0 && _notices.every(n=>n.edited===undefined);
     document.getElementById('staleWarn').classList.toggle('hidden', !stale);
     const sw=document.getElementById('searchWrap');
     if(!_notices.length){ sw.classList.add('hidden'); box.innerHTML='<div class="empty">目前沒有公告</div>'; return; }
+    if(stale){
+      // 舊後端的列表不帶內容 → 逐則補抓詳情,讓內容仍能整段顯示(不需重新部署)
+      box.innerHTML='<div class="spin">載入內容中…</div>';
+      await Promise.all(_notices.map(async (n)=>{
+        try{ const d=await api('getNoticeDetail',{id:n.id});
+          if(d&&d.ok&&d.notice){ n.content=d.notice.content; n.note=d.notice.note; n.created_at=d.notice.created_at; n.updated_at=d.notice.updated_at; }
+        }catch(e){}
+      }));
+    }
     sw.classList.remove('hidden');
     clearFilter();
   }catch(e){if(e!=='AUTH')box.innerHTML='<div class="empty">載入失敗,請重整</div>';}
