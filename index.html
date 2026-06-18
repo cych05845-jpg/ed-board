@@ -358,7 +358,7 @@ async function handleFiles(files){
       toast('上傳中…');
       const r=await api('uploadAttachment',{name:name,mime:mime,data:dataUrl.split(',')[1]});
       if(r&&r.ok){ _attachments.push({name:r.name,mime:r.mime,view:r.view,url:r.url,thumb:r.thumb}); renderAttachChips(); toast('已附加 ✓'); }
-      else toast('上傳失敗');
+      else toast('上傳失敗:'+((r&&(r.msg||r.error))||'未知'));
     }catch(e){ toast('附件處理失敗'); }
   }
 }
