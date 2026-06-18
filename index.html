@@ -511,6 +511,11 @@ async function openDetail(id){
     frozenNote+'<div class="modal-actions">'+action+leaderBtn+'</div></div></div>';
 }
 function closeModal(){document.getElementById('modalRoot').innerHTML='';}
+let _formDirty=false;
+function tryCloseForm(){
+  if(_formDirty && !confirm('尚未送出,確定要離開?剛打的內容會不見。'))return;
+  closeModal();
+}
 async function doRead(id,taskDone){
   // 樂觀更新:先就地標記「已閱」,畫面立即反應;再背景送出,失敗才還原
   const idx=_notices.findIndex(n=>n.id===id);
@@ -534,8 +539,8 @@ function openPublish(){
   const root=document.getElementById('modalRoot');
   const opts=CATEGORIES.map(c=>'<option value="'+c+'">'+c+'</option>').join('');
   const auds=[['all','全部'],['day','白班'],['evening','小夜'],['night','大夜']].map(a=>'<option value="'+a[0]+'">'+a[1]+'</option>').join('');
-  root.innerHTML='<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">'+
-    '<button class="x" onclick="closeModal()">×</button><h2>發佈公告</h2>'+
+  root.innerHTML='<div class="modal-bg" onclick="if(event.target===this)tryCloseForm()"><div class="modal">'+
+    '<button class="x" onclick="tryCloseForm()">×</button><h2>發佈公告</h2>'+
     '<label>標題</label><input id="pTitle" placeholder="例如:病媒防治消毒通知" oninput="suggestCategory()">'+
     '<label>分類</label>'+
     '<div style="display:flex;gap:8px;align-items:center;"><select id="pCat" style="flex:1;" onchange="onCategoryChange()">'+opts+'</select>'+
@@ -553,11 +558,13 @@ function openPublish(){
       '<div id="pDeadlineWrap" class="hidden"><label>任務截止日</label><input id="pDeadline" type="date"></div>'+
     '</div>'+
     '<div class="chk" style="background:var(--warn);padding:10px;border-radius:8px;margin-top:14px;"><input type="checkbox" id="pPhi"><label style="margin:0;color:#8a6d00;" for="pPhi">我已確認本公告內容<b>不含病人姓名、病歷號等個資(PHI)</b></label></div>'+
-    '<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-pri" onclick="doPublish()">發佈</button></div>'+
+    '<div class="modal-actions"><button class="btn btn-ghost" onclick="tryCloseForm()">取消</button><button class="btn btn-pri" onclick="doPublish()">發佈</button></div>'+
     '<div class="err" id="pErr"></div></div></div>';
   document.getElementById('pTask').addEventListener('change',function(){document.getElementById('pDeadlineWrap').classList.toggle('hidden',!this.checked);});
   if(dictateSupported())document.getElementById('micWrap').innerHTML='<button class="mic" id="micBtn" type="button" onclick="toggleDictation(\'pContent\',\'micBtn\')">🎤 語音輸入</button>';
   _catTouched=false;
+  _formDirty=false;
+  document.getElementById('modalRoot').oninput=function(){_formDirty=true;};
 }
 let _catTouched=false;
 function toggleAdv(){
@@ -604,8 +611,8 @@ async function openEdit(id){
   const auds=[['all','全部'],['day','白班'],['evening','小夜'],['night','大夜']].map(a=>'<option value="'+a[0]+'"'+(a[0]===n.target_audience?' selected':'')+'>'+a[1]+'</option>').join('');
   const pris=[['normal','一般'],['urgent','緊急'],['pinned','永久置頂']].map(x=>'<option value="'+x[0]+'"'+(x[0]===n.priority?' selected':'')+'>'+x[1]+'</option>').join('');
   const editedLine = (n.edited && n.edited_by_name) ? ' · 上次 '+esc(n.edited_by_name)+' 改於 '+esc(fmtDT(n.updated_at)) : '';
-  root.innerHTML='<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">'+
-    '<button class="x" onclick="closeModal()">×</button><h2>編輯公告</h2>'+
+  root.innerHTML='<div class="modal-bg" onclick="if(event.target===this)tryCloseForm()"><div class="modal">'+
+    '<button class="x" onclick="tryCloseForm()">×</button><h2>編輯公告</h2>'+
     '<div class="mmeta">原發佈:'+esc(n.created_by_name||'')+' · '+esc(fmtDT(n.created_at))+editedLine+'</div>'+
     '<label>標題</label><input id="eTitle" value="'+esc(n.title)+'">'+
     '<label>分類</label><select id="eCat">'+opts+'</select>'+
@@ -622,10 +629,12 @@ async function openEdit(id){
       '<label>備註</label><input id="eNote" value="'+esc(n.note||'')+'">'+
     '</div>'+
     '<div class="chk" style="background:var(--warn);padding:10px;border-radius:8px;margin-top:14px;"><input type="checkbox" id="ePhi"><label style="margin:0;color:#8a6d00;" for="ePhi">我已確認修改後內容<b>不含病人姓名、病歷號等個資(PHI)</b></label></div>'+
-    '<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-pri" onclick="doSaveEdit(\''+n.id+'\')">儲存修改</button></div>'+
+    '<div class="modal-actions"><button class="btn btn-ghost" onclick="tryCloseForm()">取消</button><button class="btn btn-pri" onclick="doSaveEdit(\''+n.id+'\')">儲存修改</button></div>'+
     '<div class="err" id="eErr"></div></div></div>';
   document.getElementById('eTask').addEventListener('change',function(){document.getElementById('eDeadlineWrap').classList.toggle('hidden',!this.checked);});
   if(dictateSupported())document.getElementById('micWrap').innerHTML='<button class="mic" id="micBtn" type="button" onclick="toggleDictation(\'eContent\',\'micBtn\')">🎤 語音輸入</button>';
+  _formDirty=false;
+  document.getElementById('modalRoot').oninput=function(){_formDirty=true;};
 }
 async function doSaveEdit(id){
   const ee=document.getElementById('eErr');ee.textContent='';
