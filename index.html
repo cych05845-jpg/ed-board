@@ -45,6 +45,7 @@
   .card-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
   .read-badge{font-size:13px;color:var(--ok);font-weight:700;}
   .frozen-badge{font-size:12px;color:var(--muted);}
+  .stale{background:#fff3cd;color:#8a6d00;border:1px solid #ffe69c;border-radius:10px;padding:11px 14px;font-size:13px;line-height:1.6;margin-bottom:12px;}
   .card.pinned{border-left-color:var(--pin);}
   .card.urgent{border-left-color:var(--urgent);}
   .card .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;}
@@ -142,6 +143,7 @@
     </div>
   </header>
   <div class="wrap">
+    <div id="staleWarn" class="hidden stale">⚠ 偵測到後端不是最新版,內容與日期可能顯示異常。請到 Apps Script:<b>部署 → 管理部署作業 → ✏️ → 版本選「新版本」→ 部署</b>,再重整本頁。</div>
     <div id="searchWrap" class="hidden">
       <input id="searchBox" class="search" placeholder="🔍 關鍵字:標題、分類、發佈者…" oninput="onSearch()">
       <div class="daterow">
@@ -300,6 +302,9 @@ async function loadNotices(){
   try{
     const r=await api('listActiveNotices',{});
     _notices=r.notices||[];
+    // 偵測後端版本:新版每則會帶 edited 欄位,舊版沒有
+    const stale = _notices.length>0 && _notices.every(n=>n.edited===undefined);
+    document.getElementById('staleWarn').classList.toggle('hidden', !stale);
     const sw=document.getElementById('searchWrap');
     if(!_notices.length){ sw.classList.add('hidden'); box.innerHTML='<div class="empty">目前沒有公告</div>'; return; }
     sw.classList.remove('hidden');
