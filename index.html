@@ -100,6 +100,7 @@
   .badge-nopin{background:#fff3cd;color:#8a6d00;}
   .badge-off{background:#eee;color:#999;}
   .badge-leader{background:#e7f1f8;color:var(--blue-d);}
+  .badge-role{background:#eef2f6;color:#555;}
 </style>
 </head>
 <body>
@@ -151,7 +152,7 @@
     <div id="guideBar" class="hidden guide"></div>
     <div id="staleWarn" class="hidden stale">ℹ️ 目前以相容模式顯示內容(線上後端為舊版,載入稍慢)。有空時重新部署 Code.gs 可加速,但不影響使用。</div>
     <div id="searchWrap" class="hidden">
-      <input id="searchBox" class="search" placeholder="🔍 關鍵字:標題、分類、發佈者…" oninput="onSearch()">
+      <input id="searchBox" class="search" placeholder="🔍 關鍵字(含內容,可多字):消毒 4月…" oninput="onSearch()">
       <div class="daterow">
         <input id="dateFrom" type="date" oninput="onSearch()" aria-label="起始日">
         <span>～</span>
@@ -161,7 +162,7 @@
     </div>
     <div id="noticeList"><div class="spin">載入中…</div></div>
   </div>
-  <button id="fabPublish" class="fab hidden" onclick="openPublish()">＋ 發佈公告</button>
+  <button id="fabPublish" class="fab hidden" title="可拖曳移動;輕點發佈公告">＋ 發佈公告</button>
 </div>
 
 <div id="modalRoot"></div>
@@ -175,13 +176,16 @@
    ‧ SHIFTS / ROLES:員工管理用的班別與角色選項。
    ‧ GAS_URL / SESSION_DAYS:除非重新部署後端,否則不要動。
    ──────────────────────────────────────────────────────── */
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbzD6dHsZpK3hpmAvV77tP5Eco2vssBIjbh_xBU3HfGco9vima5wEIU_sSKyZlaAfZSeGg/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxghUl1SvPp5cNKd-BgM9dCNogTDLUGIqC3NvPAx79rF2_gGlRL17idLkiGTmlDzI20Gw/exec';
 const SESSION_DAYS = 30;
 
 const CATEGORIES = ['感控','儀器','SOP','事件','教學','品管','財管','行政','排班','會議','協尋','任務','其他'];
 
 const SHIFTS = [['day','白班'],['evening','小夜'],['night','大夜'],['admin','行政']];
-const ROLES  = [['rn','護理師'],['leader','護理長/Leader']];
+// 職類(代碼, 顯示名)— 標籤可自己改,改完重傳 index.html 即可,不用部署
+const ROLES  = [['HN','護理長'],['leader','組長'],['rn','護理師'],['tech','技術員'],['an','助理員']];
+// 哪些職類算「管理者」(能發佈/編輯/管理員工/看統計)。改這個要連後端 ADMIN_ROLES 一起改並重新部署
+const ADMIN_ROLES = ['HN','leader'];
 
 // 選了分類時自動帶入的「填空範本」。要改格式或加分類範本,編這裡即可。
 // 沒列在這裡的分類(例:行政、其他)就是自由格式,不帶範本。
@@ -257,6 +261,7 @@ function hide(id){document.getElementById(id).classList.add('hidden');}
 function err(m){document.getElementById('loginErr').textContent=m||'';}
 function shiftLabel(v){const f=SHIFTS.find(x=>x[0]===v);return f?f[1]:(v||'');}
 function roleLabel(v){const f=ROLES.find(x=>x[0]===v);return f?f[1]:(v||'');}
+function isAdmin(role){return ADMIN_ROLES.indexOf(String(role||'').trim())>=0;}
 
 /* ====== Session ====== */
 function saveSession(s){ session=s; localStorage.setItem('edboard_session',JSON.stringify({...s,exp:Date.now()+SESSION_DAYS*86400000})); }
@@ -312,37 +317,91 @@ async function doSetPin(){
 /* ====== 進入主畫面 ====== */
 function enterApp(){
   hide('loginScreen');show('appScreen');
-  document.getElementById('hdrWho').textContent=session.staff_name+(session.role==='leader'?' · 護理長':'');
-  if(session.role==='leader'){show('fabPublish');show('btnStaff');}
+  document.getElementById('hdrWho').textContent=session.staff_name+(roleLabel(session.role)?(' · '+roleLabel(session.role)):'');
+  show('fabPublish');initFabDrag();          // 人人可發佈
+  if(isAdmin(session.role)){show('btnStaff');} // 帳號管理僅管理者
   renderGuide();
-  loadNotices();
+  const hadCache=renderCached();
+  loadNotices(hadCache);
 }
 function renderGuide(){
   const g=document.getElementById('guideBar');
   if(localStorage.getItem('edboard_guide_hide')==='1'){ g.classList.add('hidden'); return; }
-  const txt = session.role==='leader'
-    ? '👋 操作:右下「＋發佈公告」新增;每張卡可「✏️ 編輯」內容、「📊 統計」看誰已讀。看完也請按「我已閱讀」。'
-    : '👋 操作:看完每則公告,按該則的「我已閱讀」就完成簽閱。沒讀的會留在上面提醒你,讀過就打勾 ✓。';
+  const txt = isAdmin(session.role)
+    ? '👋 操作:右下「＋發佈公告」新增;每張卡可「✏️ 編輯」「🗑 刪除」「📊 統計」。看完也請按「我已閱讀」。'
+    : '👋 操作:看完每則按「我已閱讀」完成簽閱。你也可以用右下「＋發佈公告」發佈交班事項(會自動署上你的名字)。';
   g.innerHTML=txt+'<button class="guide-x" onclick="dismissGuide()" aria-label="關閉">×</button>';
   g.classList.remove('hidden');
 }
 function dismissGuide(){ localStorage.setItem('edboard_guide_hide','1'); document.getElementById('guideBar').classList.add('hidden'); }
 
+async function doDelete(id){
+  if(!confirm('確定要刪除這則公告嗎?刪除後會從看板移除。'))return;
+  const idx=_notices.findIndex(n=>n.id===id);
+  const prev = idx>=0 ? _notices.slice() : null;
+  if(idx>=0){ _notices.splice(idx,1); saveNoticesCache(); onSearch(); }   // 就地先移除
+  try{
+    const r=await api('archiveNotice',{id});
+    if(!r.ok){ if(prev){_notices=prev;saveNoticesCache();onSearch();} toast(r.error==='NOT_LEADER'?'僅護理長/組長可刪除':'刪除失敗'); return; }
+    toast('已刪除');
+    loadNotices(true);
+  }catch(e){ if(prev){_notices=prev;saveNoticesCache();onSearch();} if(e!=='AUTH')toast('連線失敗'); }
+}
+
+/* ====== 可拖曳的發佈鈕 ====== */
+function initFabDrag(){
+  const fab=document.getElementById('fabPublish');
+  if(fab._dragInit)return; fab._dragInit=true;
+  try{const pos=JSON.parse(localStorage.getItem('edboard_fabpos')||'null');
+    if(pos){fab.style.left=pos.left+'px';fab.style.top=pos.top+'px';fab.style.right='auto';fab.style.bottom='auto';}
+  }catch(e){}
+  let dragging=false,moved=false,sx=0,sy=0,ox=0,oy=0;
+  const down=e=>{const pt=e.touches?e.touches[0]:e;dragging=true;moved=false;sx=pt.clientX;sy=pt.clientY;
+    const r=fab.getBoundingClientRect();ox=r.left;oy=r.top;fab.style.transition='none';};
+  const move=e=>{if(!dragging)return;const pt=e.touches?e.touches[0]:e;const dx=pt.clientX-sx,dy=pt.clientY-sy;
+    if(Math.abs(dx)+Math.abs(dy)>6)moved=true;
+    if(moved){if(e.cancelable)e.preventDefault();let nx=ox+dx,ny=oy+dy;const w=fab.offsetWidth,h=fab.offsetHeight;
+      nx=Math.max(6,Math.min(window.innerWidth-w-6,nx));ny=Math.max(60,Math.min(window.innerHeight-h-6,ny));
+      fab.style.left=nx+'px';fab.style.top=ny+'px';fab.style.right='auto';fab.style.bottom='auto';}};
+  const up=()=>{if(!dragging)return;dragging=false;
+    if(moved){const r=fab.getBoundingClientRect();localStorage.setItem('edboard_fabpos',JSON.stringify({left:Math.round(r.left),top:Math.round(r.top)}));}
+    else{openPublish();}};
+  fab.addEventListener('mousedown',down);
+  fab.addEventListener('touchstart',down,{passive:false});
+  window.addEventListener('mousemove',move);
+  window.addEventListener('touchmove',move,{passive:false});
+  window.addEventListener('mouseup',up);
+  window.addEventListener('touchend',up);
+}
+
 /* ====== 公告列表 ====== */
 let _notices=[];
-async function loadNotices(){
+function saveNoticesCache(){ try{ localStorage.setItem('edboard_notices', JSON.stringify({list:_notices,t:Date.now()})); }catch(e){} }
+function renderCached(){
+  try{
+    const c=JSON.parse(localStorage.getItem('edboard_notices')||'null');
+    if(c && c.list && c.list.length){
+      _notices=c.list;
+      document.getElementById('searchWrap').classList.remove('hidden');
+      renderNotices(_notices);
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+async function loadNotices(silent){
   const box=document.getElementById('noticeList');
-  box.innerHTML='<div class="spin">載入中…</div>';
+  if(!silent) box.innerHTML='<div class="spin">載入中…</div>';
   try{
     const r=await api('listActiveNotices',{});
     _notices=r.notices||[];
     const stale = _notices.length>0 && _notices.every(n=>n.edited===undefined);
-    document.getElementById('staleWarn').classList.toggle('hidden', !(stale && session.role==='leader'));
+    document.getElementById('staleWarn').classList.toggle('hidden', !(stale && isAdmin(session.role)));
     const sw=document.getElementById('searchWrap');
-    if(!_notices.length){ sw.classList.add('hidden'); box.innerHTML='<div class="empty">目前沒有公告</div>'; return; }
+    if(!_notices.length){ sw.classList.add('hidden'); box.innerHTML='<div class="empty">目前沒有公告</div>'; saveNoticesCache(); return; }
     if(stale){
-      // 舊後端的列表不帶內容 → 逐則補抓詳情,讓內容仍能整段顯示(不需重新部署)
-      box.innerHTML='<div class="spin">載入內容中…</div>';
+      // 舊後端的列表不帶內容 → 逐則補抓詳情(背景更新時不洗掉畫面)
+      if(!silent) box.innerHTML='<div class="spin">載入內容中…</div>';
       await Promise.all(_notices.map(async (n)=>{
         try{ const d=await api('getNoticeDetail',{id:n.id});
           if(d&&d.ok&&d.notice){ n.content=d.notice.content; n.note=d.notice.note; n.created_at=d.notice.created_at; n.updated_at=d.notice.updated_at; }
@@ -350,8 +409,9 @@ async function loadNotices(){
       }));
     }
     sw.classList.remove('hidden');
+    saveNoticesCache();
     clearFilter();
-  }catch(e){if(e!=='AUTH')box.innerHTML='<div class="empty">載入失敗,請重整</div>';}
+  }catch(e){if(e!=='AUTH'&&!silent)box.innerHTML='<div class="empty">載入失敗,請重整</div>';}
 }
 function renderNotices(list){
   const box=document.getElementById('noticeList');
@@ -363,18 +423,21 @@ function clearFilter(){
   document.getElementById('dateTo').value='';
   renderNotices(_notices);
 }
+function toYMD(s){var d=new Date(String(s));if(isNaN(d.getTime()))d=new Date(String(s).replace(/-/g,'/'));if(isNaN(d.getTime()))return String(s).slice(0,10);var p=function(n){return String(n).padStart(2,'0');};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());}
 function onSearch(){
-  const q=document.getElementById('searchBox').value.trim().toLowerCase();
+  const raw=document.getElementById('searchBox').value.trim().toLowerCase();
   const from=document.getElementById('dateFrom').value;   // '' 或 yyyy-MM-dd
   const to=document.getElementById('dateTo').value;
   let list=_notices;
-  if(from) list=list.filter(n=>String(n.created_at).slice(0,10)>=from);
-  if(to)   list=list.filter(n=>String(n.created_at).slice(0,10)<=to);
-  if(q)    list=list.filter(n=>(
-    String(n.title||'').toLowerCase().includes(q) ||
-    String(n.category||'').toLowerCase().includes(q) ||
-    String(n.created_by_name||'').toLowerCase().includes(q)
-  ));
+  if(from) list=list.filter(n=>toYMD(n.created_at)>=from);
+  if(to)   list=list.filter(n=>toYMD(n.created_at)<=to);
+  if(raw){
+    const toks=raw.split(/[\s,，、]+/).filter(Boolean);   // 多關鍵字
+    list=list.filter(n=>{
+      const hay=(String(n.title||'')+' '+String(n.content||'')+' '+String(n.category||'')+' '+String(n.created_by_name||'')+' '+String(n.note||'')).toLowerCase();
+      return toks.every(t=>hay.indexOf(t)>=0);   // 全部命中(不分順序、含內容)
+    });
+  }
   renderNotices(list);
 }
 function cardHtml(n){
@@ -394,8 +457,9 @@ function cardHtml(n){
   }else{
     act='<button class="btn btn-pri btn-sm" onclick="doRead(\''+n.id+'\','+(n.is_task?'true':'false')+')">'+(n.is_task?'我已閱讀並完成':'我已閱讀')+'</button>';
   }
-  const editBtn = session.role==='leader' ? '<button class="btn btn-ghost btn-sm" onclick="openEdit(\''+n.id+'\')">✏️ 編輯</button>' : '';
-  const leaderBtn = session.role==='leader' ? '<button class="btn btn-ghost btn-sm" onclick="openStats(\''+n.id+'\',\''+esc(n.title).replace(/\x27/g,"")+'\')">📊 統計</button>' : '';
+  const editBtn = isAdmin(session.role) ? '<button class="btn btn-ghost btn-sm" onclick="openEdit(\''+n.id+'\')">✏️ 編輯</button>' : '';
+  const delBtn = isAdmin(session.role) ? '<button class="btn btn-warn btn-sm" onclick="doDelete(\''+n.id+'\')">🗑 刪除</button>' : '';
+  const leaderBtn = isAdmin(session.role) ? '<button class="btn btn-ghost btn-sm" onclick="openStats(\''+n.id+'\',\''+esc(n.title).replace(/\x27/g,"")+'\')">📊 統計</button>' : '';
   const taskHtml = (n.is_task && n.task_deadline) ? '<div class="card-note">⏰ 截止:'+esc(n.task_deadline)+'</div>' : '';
   const noteHtml = n.note ? '<div class="card-note">備註:'+esc(n.note)+'</div>' : '';
   const contentHtml = (n.content && String(n.content).trim()) ? nl2br(n.content) : '<span style="color:var(--muted);">(無內容,可按「編輯」補上)</span>';
@@ -411,7 +475,7 @@ function cardHtml(n){
     '<div class="card-content">'+contentHtml+'</div>'+
     taskHtml+noteHtml+
     '<div class="card-foot"><span class="card-meta">'+metaTxt+'</span>'+
-      '<span class="card-actions">'+editBtn+leaderBtn+act+'</span></div>'+
+      '<span class="card-actions">'+editBtn+delBtn+leaderBtn+act+'</span></div>'+
     '</div>';
 }
 
@@ -435,7 +499,7 @@ async function openDetail(id){
     else if(n.is_task && n.task_done)action='<button class="btn btn-ok" disabled>✓ 任務已完成</button>';
   }else if(n.frozen){ action='<button class="btn btn-ghost" disabled>已超過有效已讀期</button>'; }
   else{ action='<button class="btn btn-pri" onclick="doRead(\''+n.id+'\','+(n.is_task?'true':'false')+')">'+(n.is_task?'我已閱讀並完成':'我已閱讀')+'</button>'; }
-  let leaderBtn = session.role==='leader' ? '<button class="btn btn-ghost" onclick="openStats(\''+n.id+'\',\''+esc(n.title).replace(/\x27/g,"")+'\')">📊 已讀統計</button>' : '';
+  let leaderBtn = isAdmin(session.role) ? '<button class="btn btn-ghost" onclick="openStats(\''+n.id+'\',\''+esc(n.title).replace(/\x27/g,"")+'\')">📊 已讀統計</button>' : '';
   const frozenNote=n.frozen?'<div class="frozen-note">⚠ 此公告已超過有效已讀期('+esc(n.read_validity_days)+' 天),已讀名單已鎖定。</div>':'';
   const taskNote=n.is_task&&n.task_deadline?'<div class="mmeta">任務截止:'+esc(n.task_deadline)+'</div>':'';
   root.innerHTML='<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">'+
@@ -578,7 +642,16 @@ async function doSaveEdit(id){
   try{
     const r=await api('editNotice',payload);
     if(!r.ok){ee.textContent=r.error==='NOT_LEADER'?'權限不足':'儲存失敗';return;}
-    toast('已儲存修改 ✓');closeModal();loadNotices();
+    const idx=_notices.findIndex(n=>n.id===id);
+    if(idx>=0){
+      const n=_notices[idx];
+      n.title=payload.title;n.content=payload.content;n.category=payload.category;n.priority=payload.priority;
+      n.is_task=payload.is_task;n.task_deadline=payload.task_deadline;n.note=payload.note;n.target_audience=payload.target_audience;
+      n.edited=true;n.edited_by_name=session.staff_name;n.updated_at=nowStr();
+      saveNoticesCache();onSearch();
+    }
+    toast('已儲存修改 ✓');closeModal();
+    loadNotices(true);   // 背景同步
   }catch(e){if(e!=='AUTH')ee.textContent='連線失敗';}
 }
 
@@ -613,7 +686,15 @@ async function doPublish(){
   try{
     const r=await api('publishNotice',payload);
     if(!r.ok){pe.textContent=r.error==='NOT_LEADER'?'權限不足':'發佈失敗';return;}
-    toast('已發佈 ✓');closeModal();loadNotices();
+    const newN={id:r.id||('nt_'+Date.now()),title:payload.title,content:payload.content,category:payload.category,
+      priority:payload.priority,is_task:payload.is_task,task_deadline:payload.task_deadline,
+      created_at:nowStr(),created_by_name:session.staff_name,target_audience:payload.target_audience,note:'',
+      frozen:false,read:false,read_at:'',task_done:false,edited:false,edited_by_name:''};
+    _notices.unshift(newN);
+    document.getElementById('searchWrap').classList.remove('hidden');
+    saveNoticesCache();onSearch();
+    toast('已發佈 ✓');closeModal();
+    loadNotices(true);   // 背景同步(取得正確排序/時間)
   }catch(e){if(e!=='AUTH')pe.textContent='連線失敗';}
 }
 
@@ -649,7 +730,7 @@ function renderStaffMgr(staff){
   const root=document.getElementById('modalRoot');
   const rows=staff.map(s=>{
     let badges='';
-    if(s.role==='leader')badges+='<span class="badge badge-leader">護理長</span>';
+    badges+='<span class="badge '+(isAdmin(s.role)?'badge-leader':'badge-role')+'">'+esc(roleLabel(s.role))+'</span>';
     if(!s.has_pin)badges+='<span class="badge badge-nopin">未設PIN</span>';
     if(!s.is_active)badges+='<span class="badge badge-off">停用</span>';
     return '<div class="staff-row" onclick=\'openStaffEdit('+JSON.stringify(s).replace(/\x27/g,"&#39;")+')\'>'+
