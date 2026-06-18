@@ -225,6 +225,7 @@ function authFail(){ localStorage.removeItem('edboard_session'); session=null; t
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function nl2br(s){return esc(s).replace(/\n/g,'<br>');}
 function fmtDT(s){s=String(s||'');return s.length>=16?s.slice(5,16):s;}  // 06-18 08:30
+function nowStr(){const d=new Date(),p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());}
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800);}
 function show(id){document.getElementById(id).classList.remove('hidden');}
 function hide(id){document.getElementById(id).classList.add('hidden');}
@@ -396,11 +397,21 @@ async function openDetail(id){
 }
 function closeModal(){document.getElementById('modalRoot').innerHTML='';}
 async function doRead(id,taskDone){
+  // 樂觀更新:先就地標記「已閱」,畫面立即反應;再背景送出,失敗才還原
+  const idx=_notices.findIndex(n=>n.id===id);
+  const prev = idx>=0 ? Object.assign({},_notices[idx]) : null;
+  if(idx>=0){
+    _notices[idx].read=true;
+    _notices[idx].read_at=nowStr();
+    if(taskDone)_notices[idx].task_done=true;
+    onSearch();
+  }
   try{
     const r=await api('markAsRead',{notice_id:id,user_agent:navigator.userAgent,task_done:taskDone});
-    if(!r.ok){toast(r.msg||'簽閱失敗');return;}
-    toast(taskDone?'已標記完成':'已簽閱 ✓');closeModal();loadNotices();
-  }catch(e){if(e!=='AUTH')toast('連線失敗');}
+    if(!r.ok){ if(idx>=0&&prev){_notices[idx]=prev;onSearch();} toast(r.msg||'簽閱失敗'); return; }
+    if(idx>=0 && r.read_at){ _notices[idx].read_at=r.read_at; }
+    toast(taskDone?'已標記完成':'已簽閱 ✓');
+  }catch(e){ if(idx>=0&&prev){_notices[idx]=prev;onSearch();} if(e!=='AUTH')toast('連線失敗'); }
 }
 
 /* ====== Leader 發佈 ====== */
