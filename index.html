@@ -46,6 +46,8 @@
   .read-badge{font-size:13px;color:var(--ok);font-weight:700;}
   .frozen-badge{font-size:12px;color:var(--muted);}
   .stale{background:#fff3cd;color:#8a6d00;border:1px solid #ffe69c;border-radius:10px;padding:11px 14px;font-size:13px;line-height:1.6;margin-bottom:12px;}
+  .guide{background:#e7f1f8;color:var(--blue-d);border:1px solid #cfe2f0;border-radius:10px;padding:11px 38px 11px 14px;font-size:13px;line-height:1.6;margin-bottom:12px;position:relative;}
+  .guide-x{position:absolute;top:5px;right:8px;background:none;border:none;font-size:20px;color:var(--blue-d);cursor:pointer;line-height:1;padding:2px 6px;}
   .card-date{font-size:15px;font-weight:700;color:var(--blue-d);margin-bottom:8px;display:flex;align-items:center;gap:8px;}
   .card-age{font-size:12px;font-weight:700;color:var(--muted);background:#eef2f6;border-radius:20px;padding:1px 9px;}
   .card-age.fresh{color:var(--ok);background:#e6f4ea;}
@@ -146,6 +148,7 @@
     </div>
   </header>
   <div class="wrap">
+    <div id="guideBar" class="hidden guide"></div>
     <div id="staleWarn" class="hidden stale">ℹ️ 目前以相容模式顯示內容(線上後端為舊版,載入稍慢)。有空時重新部署 Code.gs 可加速,但不影響使用。</div>
     <div id="searchWrap" class="hidden">
       <input id="searchBox" class="search" placeholder="🔍 關鍵字:標題、分類、發佈者…" oninput="onSearch()">
@@ -311,8 +314,19 @@ function enterApp(){
   hide('loginScreen');show('appScreen');
   document.getElementById('hdrWho').textContent=session.staff_name+(session.role==='leader'?' · 護理長':'');
   if(session.role==='leader'){show('fabPublish');show('btnStaff');}
+  renderGuide();
   loadNotices();
 }
+function renderGuide(){
+  const g=document.getElementById('guideBar');
+  if(localStorage.getItem('edboard_guide_hide')==='1'){ g.classList.add('hidden'); return; }
+  const txt = session.role==='leader'
+    ? '👋 操作:右下「＋發佈公告」新增;每張卡可「✏️ 編輯」內容、「📊 統計」看誰已讀。看完也請按「我已閱讀」。'
+    : '👋 操作:看完每則公告,按該則的「我已閱讀」就完成簽閱。沒讀的會留在上面提醒你,讀過就打勾 ✓。';
+  g.innerHTML=txt+'<button class="guide-x" onclick="dismissGuide()" aria-label="關閉">×</button>';
+  g.classList.remove('hidden');
+}
+function dismissGuide(){ localStorage.setItem('edboard_guide_hide','1'); document.getElementById('guideBar').classList.add('hidden'); }
 
 /* ====== 公告列表 ====== */
 let _notices=[];
@@ -323,7 +337,7 @@ async function loadNotices(){
     const r=await api('listActiveNotices',{});
     _notices=r.notices||[];
     const stale = _notices.length>0 && _notices.every(n=>n.edited===undefined);
-    document.getElementById('staleWarn').classList.toggle('hidden', !stale);
+    document.getElementById('staleWarn').classList.toggle('hidden', !(stale && session.role==='leader'));
     const sw=document.getElementById('searchWrap');
     if(!_notices.length){ sw.classList.add('hidden'); box.innerHTML='<div class="empty">目前沒有公告</div>'; return; }
     if(stale){
