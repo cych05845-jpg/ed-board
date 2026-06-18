@@ -37,7 +37,14 @@
   input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);}
   .login-box .btn{width:100%;margin-top:20px;padding:13px;}
   .err{color:var(--urgent);font-size:13px;margin-top:10px;min-height:18px;}
-  .card{background:var(--card);border-radius:12px;padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow);cursor:pointer;border-left:4px solid transparent;}
+  .card{background:var(--card);border-radius:12px;padding:14px 16px;margin-bottom:12px;box-shadow:var(--shadow);border-left:4px solid transparent;}
+  .card-content{white-space:pre-wrap;word-break:break-word;font-size:15px;color:var(--ink);line-height:1.65;margin:4px 0 10px;}
+  .card-note{font-size:12px;color:var(--muted);margin-bottom:8px;}
+  .card-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:10px;}
+  .card-meta{font-size:12px;color:var(--muted);}
+  .card-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+  .read-badge{font-size:13px;color:var(--ok);font-weight:700;}
+  .frozen-badge{font-size:12px;color:var(--muted);}
   .card.pinned{border-left-color:var(--pin);}
   .card.urgent{border-left-color:var(--urgent);}
   .card .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;}
@@ -76,6 +83,10 @@
   .search{width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:10px;font-size:15px;margin-bottom:12px;background:#fff;}
   .mic{background:#eef2f6;border:none;border-radius:8px;padding:5px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--ink);}
   .mic.rec{background:#fbe3e3;color:var(--urgent);}
+  .daterow{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+  .daterow input{flex:1;padding:9px 10px;font-size:14px;border:1px solid var(--line);border-radius:8px;}
+  .daterow span{color:var(--muted);font-size:14px;}
+  .daterow .mic{flex:0 0 auto;white-space:nowrap;}
   .staff-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;}
   .staff-row .nm{font-weight:600;}
   .staff-row .sub{font-size:12px;color:var(--muted);}
@@ -131,7 +142,15 @@
     </div>
   </header>
   <div class="wrap">
-    <div id="searchWrap" class="hidden"><input id="searchBox" class="search" placeholder="🔍 搜尋標題、分類、發佈者…" oninput="onSearch()"></div>
+    <div id="searchWrap" class="hidden">
+      <input id="searchBox" class="search" placeholder="🔍 關鍵字:標題、分類、發佈者…" oninput="onSearch()">
+      <div class="daterow">
+        <input id="dateFrom" type="date" oninput="onSearch()" aria-label="起始日">
+        <span>～</span>
+        <input id="dateTo" type="date" oninput="onSearch()" aria-label="結束日">
+        <button class="mic" type="button" onclick="clearFilter()">清除</button>
+      </div>
+    </div>
     <div id="noticeList"><div class="spin">載入中…</div></div>
   </div>
   <button id="fabPublish" class="fab hidden" onclick="openPublish()">＋ 發佈公告</button>
@@ -141,12 +160,52 @@
 <div class="toast" id="toast"></div>
 
 <script>
-/* ====== 設定 ====== */
+/* ════════════ 可自行編輯的設定區(script 外層)════════════
+   這幾行你可以自己改,改完重新上傳 index.html 即可,不用動 GAS。
+   ‧ CATEGORIES:公告分類下拉選單。要新增/刪除/改名,直接編這一行 —
+                 每個分類用單引號包住、逗號分隔。'其他' 建議留著當萬用桶。
+   ‧ SHIFTS / ROLES:員工管理用的班別與角色選項。
+   ‧ GAS_URL / SESSION_DAYS:除非重新部署後端,否則不要動。
+   ──────────────────────────────────────────────────────── */
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzD6dHsZpK3hpmAvV77tP5Eco2vssBIjbh_xBU3HfGco9vima5wEIU_sSKyZlaAfZSeGg/exec';
 const SESSION_DAYS = 30;
-const CATEGORIES = ['感控','儀器','SOP','事件','教學','品管','財管','行政','協尋','任務','其他'];
+
+const CATEGORIES = ['感控','儀器','SOP','事件','教學','品管','財管','行政','排班','會議','協尋','任務','其他'];
+
 const SHIFTS = [['day','白班'],['evening','小夜'],['night','大夜'],['admin','行政']];
 const ROLES  = [['rn','護理師'],['leader','護理長/Leader']];
+
+// 選了分類時自動帶入的「填空範本」。要改格式或加分類範本,編這裡即可。
+// 沒列在這裡的分類(例:行政、其他)就是自由格式,不帶範本。
+const TEMPLATES = {
+  '感控':'【施作單位】\n【消毒/施作日期】\n【方式】\n【棟別樓層】\n【聯絡電話】',
+  '儀器':'【儀器名稱】\n【事項】(保養 / 故障 / 新增 / 操作異動)\n【影響範圍】\n【處理方式】',
+  'SOP' :'【SOP 名稱或編號】\n【異動重點】\n【生效日期】\n【與舊版差異】',
+  '事件':'【發生時間】\n【地點 / 區域】\n【經過】\n【後續 / 改善】',
+  '教學':'【課程名稱】\n【日期時間】\n【地點】\n【對象 / 名額】\n【報名方式】',
+  '品管':'【指標 / 項目】\n【期間】\n【結果】\n【改善行動】',
+  '財管':'【項目】\n【金額 / 預算】\n【期限】\n【說明】',
+  '排班':'【適用月份】\n【預約期間】\n【規則】\n1. \n【備註】',
+  '會議':'【會議名稱】\n【日期時間】\n【地點】\n【出席對象】\n【議程】',
+  '協尋':'【協尋物品 / 對象】\n【最後出現時間地點】\n【特徵】\n【聯絡方式】',
+  '任務':'【任務內容】\n【完成期限】\n【負責對象】\n【回報方式】'
+};
+
+// 自動歸類用的關鍵字。系統會比對你打的標題+內容,命中最多的分類就自動選起來(可手動改)。
+const CATEGORY_HINTS = {
+  '感控':['消毒','病媒','清潔','感控','防治','洗手','隔離','清消'],
+  '排班':['預約off','off','班表','抽籤','工時','預假','換班','休假','排班'],
+  '會議':['meeting','會議','晨會'],
+  '教學':['acls','pals','tncc','課程','訓練','教學','在職教育','演練','研習','上課'],
+  '儀器':['儀器','設備','保養','故障','機器','除顫','監視'],
+  'SOP' :['sop','流程','標準作業','作業規範','指引'],
+  '事件':['事件','異常','跌倒','糾紛','投訴','申訴','通報'],
+  '協尋':['協尋','遺失','尋找','點班本'],
+  '品管':['品管','品質','指標','稽核','查核'],
+  '財管':['請款','預算','成本','耗材費','費用'],
+  '任務':['任務','繳交','回填','填寫','請於']
+};
+/* ═══════════════════ 設定區結束 ═══════════════════ */
 
 /* ====== 狀態 ====== */
 let session = null;
@@ -242,22 +301,32 @@ async function loadNotices(){
     const sw=document.getElementById('searchWrap');
     if(!_notices.length){ sw.classList.add('hidden'); box.innerHTML='<div class="empty">目前沒有公告</div>'; return; }
     sw.classList.remove('hidden');
-    document.getElementById('searchBox').value='';
-    renderNotices(_notices);
+    clearFilter();
   }catch(e){if(e!=='AUTH')box.innerHTML='<div class="empty">載入失敗,請重整</div>';}
 }
 function renderNotices(list){
   const box=document.getElementById('noticeList');
   box.innerHTML = list.length ? list.map(cardHtml).join('') : '<div class="empty">沒有符合的公告</div>';
 }
+function clearFilter(){
+  document.getElementById('searchBox').value='';
+  document.getElementById('dateFrom').value='';
+  document.getElementById('dateTo').value='';
+  renderNotices(_notices);
+}
 function onSearch(){
   const q=document.getElementById('searchBox').value.trim().toLowerCase();
-  if(!q){renderNotices(_notices);return;}
-  renderNotices(_notices.filter(n=>(
+  const from=document.getElementById('dateFrom').value;   // '' 或 yyyy-MM-dd
+  const to=document.getElementById('dateTo').value;
+  let list=_notices;
+  if(from) list=list.filter(n=>String(n.created_at).slice(0,10)>=from);
+  if(to)   list=list.filter(n=>String(n.created_at).slice(0,10)<=to);
+  if(q)    list=list.filter(n=>(
     String(n.title||'').toLowerCase().includes(q) ||
     String(n.category||'').toLowerCase().includes(q) ||
     String(n.created_by_name||'').toLowerCase().includes(q)
-  )));
+  ));
+  renderNotices(list);
 }
 function cardHtml(n){
   let cls='card';if(n.priority==='pinned')cls+=' pinned';if(n.priority==='urgent')cls+=' urgent';
@@ -266,9 +335,27 @@ function cardHtml(n){
   if(n.priority==='urgent')tags+='<span class="tag tag-urgent">緊急</span>';
   if(n.is_task)tags+='<span class="tag tag-task">任務</span>';
   tags+='<span class="tag tag-cat">'+esc(n.category)+'</span>';
-  const readHtml=n.read?'<span class="read-yes">✓ 已閱 '+esc(String(n.read_at).slice(5,16))+'</span>':'<span class="read-no">● 未閱</span>';
-  return '<div class="'+cls+'" onclick="openDetail(\''+n.id+'\')"><div class="top">'+tags+'</div><h3>'+esc(n.title)+'</h3>'+
-    '<div class="meta"><span>'+esc(n.created_by_name||'')+' · '+esc(String(n.created_at).slice(0,10))+'</span>'+readHtml+'</div></div>';
+  let act='';
+  if(n.read){
+    act='<span class="read-badge">✓ 已閱 '+esc(String(n.read_at).slice(5,16))+'</span>';
+    if(n.is_task && !n.task_done) act+='<button class="btn btn-ok btn-sm" onclick="doRead(\''+n.id+'\',true)">標記完成</button>';
+    else if(n.is_task && n.task_done) act+='<span class="read-badge">✓ 任務完成</span>';
+  }else if(n.frozen){
+    act='<span class="frozen-badge">已超過有效已讀期</span>';
+  }else{
+    act='<button class="btn btn-pri btn-sm" onclick="doRead(\''+n.id+'\','+(n.is_task?'true':'false')+')">'+(n.is_task?'我已閱讀並完成':'我已閱讀')+'</button>';
+  }
+  const leaderBtn = session.role==='leader' ? '<button class="btn btn-ghost btn-sm" onclick="openStats(\''+n.id+'\',\''+esc(n.title).replace(/\x27/g,"")+'\')">📊 統計</button>' : '';
+  const taskHtml = (n.is_task && n.task_deadline) ? '<div class="card-note">⏰ 截止:'+esc(n.task_deadline)+'</div>' : '';
+  const noteHtml = n.note ? '<div class="card-note">備註:'+esc(n.note)+'</div>' : '';
+  return '<div class="'+cls+'">'+
+    '<div class="top">'+tags+'</div>'+
+    '<h3>'+esc(n.title)+'</h3>'+
+    '<div class="card-content">'+nl2br(n.content)+'</div>'+
+    taskHtml+noteHtml+
+    '<div class="card-foot"><span class="card-meta">'+esc(n.created_by_name||'')+' · '+esc(String(n.created_at).slice(0,16))+'</span>'+
+      '<span class="card-actions">'+leaderBtn+act+'</span></div>'+
+    '</div>';
 }
 
 /* ====== 公告詳情 ====== */
@@ -318,20 +405,60 @@ function openPublish(){
   const auds=[['all','全部'],['day','白班'],['evening','小夜'],['night','大夜']].map(a=>'<option value="'+a[0]+'">'+a[1]+'</option>').join('');
   root.innerHTML='<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">'+
     '<button class="x" onclick="closeModal()">×</button><h2>發佈公告</h2>'+
-    '<label>標題</label><input id="pTitle" placeholder="公告標題">'+
-    '<label style="display:flex;justify-content:space-between;align-items:center;">內容 <span id="micWrap"></span></label><textarea id="pContent" rows="6" placeholder="公告內容…"></textarea>'+
-    '<div class="row2"><div><label>分類</label><select id="pCat">'+opts+'</select></div>'+
-      '<div><label>重要性</label><select id="pPri"><option value="normal">一般</option><option value="urgent">緊急</option><option value="pinned">永久置頂</option></select></div></div>'+
-    '<div class="row2"><div><label>顯示期(天)</label><input id="pDisp" type="number" value="3"></div>'+
-      '<div><label>有效已讀期(天)</label><input id="pValid" type="number" value="14"></div></div>'+
-    '<label>對象</label><select id="pAud">'+auds+'</select>'+
-    '<div class="chk"><input type="checkbox" id="pTask"><label style="margin:0;color:var(--ink);" for="pTask">這是任務型公告(需追蹤完成)</label></div>'+
-    '<div id="pDeadlineWrap" class="hidden"><label>任務截止日</label><input id="pDeadline" type="date"></div>'+
-    '<div class="chk" style="background:var(--warn);padding:10px;border-radius:8px;"><input type="checkbox" id="pPhi"><label style="margin:0;color:#8a6d00;" for="pPhi">我已確認本公告內容<b>不含病人姓名、病歷號等個資(PHI)</b></label></div>'+
+    '<label>標題</label><input id="pTitle" placeholder="例如:病媒防治消毒通知" oninput="suggestCategory()">'+
+    '<label>分類</label>'+
+    '<div style="display:flex;gap:8px;align-items:center;"><select id="pCat" style="flex:1;" onchange="onCategoryChange()">'+opts+'</select>'+
+      '<button class="mic" type="button" onclick="applyTemplate()">📋 套用範本</button></div>'+
+    '<div id="catHint" class="mmeta" style="margin-top:6px;min-height:16px;"></div>'+
+    '<label style="display:flex;justify-content:space-between;align-items:center;">內容 <span id="micWrap"></span></label>'+
+    '<textarea id="pContent" rows="7" placeholder="可直接打字、按🎤語音、或用上方「套用範本」帶出格式…" oninput="suggestCategory()"></textarea>'+
+    '<div style="margin-top:14px;"><a id="advToggle" onclick="toggleAdv()" style="color:var(--blue);font-size:14px;cursor:pointer;">▸ 進階設定(重要性、顯示天數、對象、任務)</a></div>'+
+    '<div id="advBox" class="hidden" style="margin-top:8px;">'+
+      '<div class="row2"><div><label>重要性</label><select id="pPri"><option value="normal">一般</option><option value="urgent">緊急</option><option value="pinned">永久置頂</option></select></div>'+
+        '<div><label>對象</label><select id="pAud">'+auds+'</select></div></div>'+
+      '<div class="row2"><div><label>顯示期(天)</label><input id="pDisp" type="number" value="3"></div>'+
+        '<div><label>有效已讀期(天)</label><input id="pValid" type="number" value="14"></div></div>'+
+      '<div class="chk"><input type="checkbox" id="pTask"><label style="margin:0;color:var(--ink);" for="pTask">這是任務型公告(需追蹤完成)</label></div>'+
+      '<div id="pDeadlineWrap" class="hidden"><label>任務截止日</label><input id="pDeadline" type="date"></div>'+
+    '</div>'+
+    '<div class="chk" style="background:var(--warn);padding:10px;border-radius:8px;margin-top:14px;"><input type="checkbox" id="pPhi"><label style="margin:0;color:#8a6d00;" for="pPhi">我已確認本公告內容<b>不含病人姓名、病歷號等個資(PHI)</b></label></div>'+
     '<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-pri" onclick="doPublish()">發佈</button></div>'+
     '<div class="err" id="pErr"></div></div></div>';
   document.getElementById('pTask').addEventListener('change',function(){document.getElementById('pDeadlineWrap').classList.toggle('hidden',!this.checked);});
   if(dictateSupported())document.getElementById('micWrap').innerHTML='<button class="mic" id="micBtn" type="button" onclick="toggleDictation(\'pContent\',\'micBtn\')">🎤 語音輸入</button>';
+  _catTouched=false;
+}
+let _catTouched=false;
+function toggleAdv(){
+  const b=document.getElementById('advBox'), t=document.getElementById('advToggle');
+  const open=!b.classList.toggle('hidden');
+  t.textContent=(open?'▾':'▸')+' 進階設定(重要性、顯示天數、對象、任務)';
+}
+function suggestCategory(){
+  if(_catTouched)return;            // 手動選過分類就不再自動覆蓋
+  const text=((document.getElementById('pTitle').value||'')+' '+(document.getElementById('pContent').value||'')).toLowerCase();
+  if(!text.trim())return;
+  let best=null,bestScore=0;
+  Object.keys(CATEGORY_HINTS).forEach(cat=>{
+    let s=0; CATEGORY_HINTS[cat].forEach(kw=>{ if(text.indexOf(kw.toLowerCase())>=0)s++; });
+    if(s>bestScore){bestScore=s;best=cat;}
+  });
+  if(best){
+    document.getElementById('pCat').value=best;
+    document.getElementById('catHint').innerHTML='✨ 已依內容自動歸類為「<b>'+best+'</b>」,可自行更改'+(TEMPLATES[best]?' · 需要格式可按「套用範本」':'');
+  }
+}
+function onCategoryChange(){
+  _catTouched=true;
+  const cat=document.getElementById('pCat').value, ta=document.getElementById('pContent');
+  if(!ta.value.trim() && TEMPLATES[cat]){ ta.value=TEMPLATES[cat]; document.getElementById('catHint').innerHTML='已選「'+cat+'」· 已帶入範本,填空即可'; }
+  else document.getElementById('catHint').innerHTML='已選「'+cat+'」'+(TEMPLATES[cat]?' · 需要格式可按「套用範本」':'');
+}
+function applyTemplate(){
+  const cat=document.getElementById('pCat').value, ta=document.getElementById('pContent'), tpl=TEMPLATES[cat];
+  if(!tpl){toast('「'+cat+'」沒有預設範本');return;}
+  if(ta.value.trim() && !confirm('要用「'+cat+'」範本取代目前內容嗎?'))return;
+  ta.value=tpl; _catTouched=true;
 }
 
 /* ====== 語音輸入(瀏覽器內建,免 key)====== */
