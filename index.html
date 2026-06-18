@@ -224,6 +224,7 @@ async function api(action, payload){
 function authFail(){ localStorage.removeItem('edboard_session'); session=null; toast('登入已過期,請重新登入'); setTimeout(()=>location.reload(),1200); }
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function nl2br(s){return esc(s).replace(/\n/g,'<br>');}
+function fmtDT(s){s=String(s||'');return s.length>=16?s.slice(5,16):s;}  // 06-18 08:30
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800);}
 function show(id){document.getElementById(id).classList.remove('hidden');}
 function hide(id){document.getElementById(id).classList.add('hidden');}
@@ -337,7 +338,7 @@ function cardHtml(n){
   tags+='<span class="tag tag-cat">'+esc(n.category)+'</span>';
   let act='';
   if(n.read){
-    act='<span class="read-badge">✓ 已閱 '+esc(String(n.read_at).slice(5,16))+'</span>';
+    act='<span class="read-badge">✓ 已閱 '+esc(fmtDT(n.read_at))+'</span>';
     if(n.is_task && !n.task_done) act+='<button class="btn btn-ok btn-sm" onclick="doRead(\''+n.id+'\',true)">標記完成</button>';
     else if(n.is_task && n.task_done) act+='<span class="read-badge">✓ 任務完成</span>';
   }else if(n.frozen){
@@ -345,16 +346,20 @@ function cardHtml(n){
   }else{
     act='<button class="btn btn-pri btn-sm" onclick="doRead(\''+n.id+'\','+(n.is_task?'true':'false')+')">'+(n.is_task?'我已閱讀並完成':'我已閱讀')+'</button>';
   }
+  const editBtn = session.role==='leader' ? '<button class="btn btn-ghost btn-sm" onclick="openEdit(\''+n.id+'\')">✏️ 編輯</button>' : '';
   const leaderBtn = session.role==='leader' ? '<button class="btn btn-ghost btn-sm" onclick="openStats(\''+n.id+'\',\''+esc(n.title).replace(/\x27/g,"")+'\')">📊 統計</button>' : '';
   const taskHtml = (n.is_task && n.task_deadline) ? '<div class="card-note">⏰ 截止:'+esc(n.task_deadline)+'</div>' : '';
   const noteHtml = n.note ? '<div class="card-note">備註:'+esc(n.note)+'</div>' : '';
+  const contentHtml = (n.content && String(n.content).trim()) ? nl2br(n.content) : '<span style="color:var(--muted);">(無內容,可按「編輯」補上)</span>';
+  let metaTxt = esc(n.created_by_name||'')+' 發佈 · '+esc(fmtDT(n.created_at));
+  if(n.edited && n.edited_by_name) metaTxt += '　✎ '+esc(n.edited_by_name)+' 修改 · '+esc(fmtDT(n.updated_at));
   return '<div class="'+cls+'">'+
     '<div class="top">'+tags+'</div>'+
     '<h3>'+esc(n.title)+'</h3>'+
-    '<div class="card-content">'+nl2br(n.content)+'</div>'+
+    '<div class="card-content">'+contentHtml+'</div>'+
     taskHtml+noteHtml+
-    '<div class="card-foot"><span class="card-meta">'+esc(n.created_by_name||'')+' · '+esc(String(n.created_at).slice(0,16))+'</span>'+
-      '<span class="card-actions">'+leaderBtn+act+'</span></div>'+
+    '<div class="card-foot"><span class="card-meta">'+metaTxt+'</span>'+
+      '<span class="card-actions">'+editBtn+leaderBtn+act+'</span></div>'+
     '</div>';
 }
 
@@ -459,6 +464,60 @@ function applyTemplate(){
   if(!tpl){toast('「'+cat+'」沒有預設範本');return;}
   if(ta.value.trim() && !confirm('要用「'+cat+'」範本取代目前內容嗎?'))return;
   ta.value=tpl; _catTouched=true;
+}
+
+/* ====== Leader 修改公告 ====== */
+async function openEdit(id){
+  const root=document.getElementById('modalRoot');
+  root.innerHTML='<div class="modal-bg"><div class="modal"><div class="spin">載入中…</div></div></div>';
+  let r;
+  try{ r=await api('getNoticeDetail',{id}); }catch(e){ if(e!=='AUTH'){closeModal();toast('載入失敗');} return; }
+  if(!r.ok){closeModal();toast('找不到公告');return;}
+  const n=r.notice;
+  const opts=CATEGORIES.map(c=>'<option value="'+c+'"'+(c===n.category?' selected':'')+'>'+c+'</option>').join('');
+  const auds=[['all','全部'],['day','白班'],['evening','小夜'],['night','大夜']].map(a=>'<option value="'+a[0]+'"'+(a[0]===n.target_audience?' selected':'')+'>'+a[1]+'</option>').join('');
+  const pris=[['normal','一般'],['urgent','緊急'],['pinned','永久置頂']].map(x=>'<option value="'+x[0]+'"'+(x[0]===n.priority?' selected':'')+'>'+x[1]+'</option>').join('');
+  const editedLine = (n.edited && n.edited_by_name) ? ' · 上次 '+esc(n.edited_by_name)+' 改於 '+esc(fmtDT(n.updated_at)) : '';
+  root.innerHTML='<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">'+
+    '<button class="x" onclick="closeModal()">×</button><h2>編輯公告</h2>'+
+    '<div class="mmeta">原發佈:'+esc(n.created_by_name||'')+' · '+esc(fmtDT(n.created_at))+editedLine+'</div>'+
+    '<label>標題</label><input id="eTitle" value="'+esc(n.title)+'">'+
+    '<label>分類</label><select id="eCat">'+opts+'</select>'+
+    '<label style="display:flex;justify-content:space-between;align-items:center;">內容 <span id="micWrap"></span></label>'+
+    '<textarea id="eContent" rows="8">'+esc(n.content||'')+'</textarea>'+
+    '<div style="margin-top:14px;"><a id="advToggle" onclick="toggleAdv()" style="color:var(--blue);font-size:14px;cursor:pointer;">▸ 進階設定(重要性、顯示天數、對象、任務、備註)</a></div>'+
+    '<div id="advBox" class="hidden" style="margin-top:8px;">'+
+      '<div class="row2"><div><label>重要性</label><select id="ePri">'+pris+'</select></div>'+
+        '<div><label>對象</label><select id="eAud">'+auds+'</select></div></div>'+
+      '<div class="row2"><div><label>顯示期(天)</label><input id="eDisp" type="number" value="'+esc(n.display_days||3)+'"></div>'+
+        '<div><label>有效已讀期(天)</label><input id="eValid" type="number" value="'+esc(n.read_validity_days||14)+'"></div></div>'+
+      '<div class="chk"><input type="checkbox" id="eTask"'+(n.is_task?' checked':'')+'><label style="margin:0;color:var(--ink);" for="eTask">任務型(需追蹤完成)</label></div>'+
+      '<div id="eDeadlineWrap" class="'+(n.is_task?'':'hidden')+'"><label>任務截止日</label><input id="eDeadline" type="date" value="'+esc(n.task_deadline||'')+'"></div>'+
+      '<label>備註</label><input id="eNote" value="'+esc(n.note||'')+'">'+
+    '</div>'+
+    '<div class="chk" style="background:var(--warn);padding:10px;border-radius:8px;margin-top:14px;"><input type="checkbox" id="ePhi"><label style="margin:0;color:#8a6d00;" for="ePhi">我已確認修改後內容<b>不含病人姓名、病歷號等個資(PHI)</b></label></div>'+
+    '<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-pri" onclick="doSaveEdit(\''+n.id+'\')">儲存修改</button></div>'+
+    '<div class="err" id="eErr"></div></div></div>';
+  document.getElementById('eTask').addEventListener('change',function(){document.getElementById('eDeadlineWrap').classList.toggle('hidden',!this.checked);});
+  if(dictateSupported())document.getElementById('micWrap').innerHTML='<button class="mic" id="micBtn" type="button" onclick="toggleDictation(\'eContent\',\'micBtn\')">🎤 語音輸入</button>';
+}
+async function doSaveEdit(id){
+  const ee=document.getElementById('eErr');ee.textContent='';
+  const title=document.getElementById('eTitle').value.trim();
+  if(!title){ee.textContent='請輸入標題';return;}
+  if(!document.getElementById('ePhi').checked){ee.textContent='請先確認不含個資(PHI)';return;}
+  const isTask=document.getElementById('eTask').checked;
+  const payload={id,title,content:document.getElementById('eContent').value,category:document.getElementById('eCat').value,
+    priority:document.getElementById('ePri').value,is_task:isTask,
+    task_deadline:isTask?document.getElementById('eDeadline').value:'',
+    display_days:Number(document.getElementById('eDisp').value)||3,
+    read_validity_days:Number(document.getElementById('eValid').value)||14,
+    target_audience:document.getElementById('eAud').value,note:document.getElementById('eNote').value};
+  try{
+    const r=await api('editNotice',payload);
+    if(!r.ok){ee.textContent=r.error==='NOT_LEADER'?'權限不足':'儲存失敗';return;}
+    toast('已儲存修改 ✓');closeModal();loadNotices();
+  }catch(e){if(e!=='AUTH')ee.textContent='連線失敗';}
 }
 
 /* ====== 語音輸入(瀏覽器內建,免 key)====== */
