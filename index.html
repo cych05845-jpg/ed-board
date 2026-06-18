@@ -73,6 +73,9 @@
   .toast.show{opacity:.95;}
   .empty{text-align:center;color:var(--muted);padding:40px 20px;font-size:14px;}
   .spin{text-align:center;color:var(--muted);padding:30px;}
+  .search{width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:10px;font-size:15px;margin-bottom:12px;background:#fff;}
+  .mic{background:#eef2f6;border:none;border-radius:8px;padding:5px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--ink);}
+  .mic.rec{background:#fbe3e3;color:var(--urgent);}
   .staff-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;}
   .staff-row .nm{font-weight:600;}
   .staff-row .sub{font-size:12px;color:var(--muted);}
@@ -127,7 +130,10 @@
       </div>
     </div>
   </header>
-  <div class="wrap"><div id="noticeList"><div class="spin">載入中…</div></div></div>
+  <div class="wrap">
+    <div id="searchWrap" class="hidden"><input id="searchBox" class="search" placeholder="🔍 搜尋標題、分類、發佈者…" oninput="onSearch()"></div>
+    <div id="noticeList"><div class="spin">載入中…</div></div>
+  </div>
   <button id="fabPublish" class="fab hidden" onclick="openPublish()">＋ 發佈公告</button>
 </div>
 
@@ -138,7 +144,7 @@
 /* ====== 設定 ====== */
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzD6dHsZpK3hpmAvV77tP5Eco2vssBIjbh_xBU3HfGco9vima5wEIU_sSKyZlaAfZSeGg/exec';
 const SESSION_DAYS = 30;
-const CATEGORIES = ['感控','儀器','SOP','事件','教育','行政','協尋','任務'];
+const CATEGORIES = ['感控','儀器','SOP','事件','教學','品管','財管','行政','協尋','任務','其他'];
 const SHIFTS = [['day','白班'],['evening','小夜'],['night','大夜'],['admin','行政']];
 const ROLES  = [['rn','護理師'],['leader','護理長/Leader']];
 
@@ -226,15 +232,32 @@ function enterApp(){
 }
 
 /* ====== 公告列表 ====== */
+let _notices=[];
 async function loadNotices(){
   const box=document.getElementById('noticeList');
   box.innerHTML='<div class="spin">載入中…</div>';
   try{
     const r=await api('listActiveNotices',{});
-    const list=r.notices||[];
-    if(!list.length){box.innerHTML='<div class="empty">目前沒有公告</div>';return;}
-    box.innerHTML=list.map(cardHtml).join('');
+    _notices=r.notices||[];
+    const sw=document.getElementById('searchWrap');
+    if(!_notices.length){ sw.classList.add('hidden'); box.innerHTML='<div class="empty">目前沒有公告</div>'; return; }
+    sw.classList.remove('hidden');
+    document.getElementById('searchBox').value='';
+    renderNotices(_notices);
   }catch(e){if(e!=='AUTH')box.innerHTML='<div class="empty">載入失敗,請重整</div>';}
+}
+function renderNotices(list){
+  const box=document.getElementById('noticeList');
+  box.innerHTML = list.length ? list.map(cardHtml).join('') : '<div class="empty">沒有符合的公告</div>';
+}
+function onSearch(){
+  const q=document.getElementById('searchBox').value.trim().toLowerCase();
+  if(!q){renderNotices(_notices);return;}
+  renderNotices(_notices.filter(n=>(
+    String(n.title||'').toLowerCase().includes(q) ||
+    String(n.category||'').toLowerCase().includes(q) ||
+    String(n.created_by_name||'').toLowerCase().includes(q)
+  )));
 }
 function cardHtml(n){
   let cls='card';if(n.priority==='pinned')cls+=' pinned';if(n.priority==='urgent')cls+=' urgent';
@@ -296,7 +319,7 @@ function openPublish(){
   root.innerHTML='<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">'+
     '<button class="x" onclick="closeModal()">×</button><h2>發佈公告</h2>'+
     '<label>標題</label><input id="pTitle" placeholder="公告標題">'+
-    '<label>內容</label><textarea id="pContent" rows="6" placeholder="公告內容…"></textarea>'+
+    '<label style="display:flex;justify-content:space-between;align-items:center;">內容 <span id="micWrap"></span></label><textarea id="pContent" rows="6" placeholder="公告內容…"></textarea>'+
     '<div class="row2"><div><label>分類</label><select id="pCat">'+opts+'</select></div>'+
       '<div><label>重要性</label><select id="pPri"><option value="normal">一般</option><option value="urgent">緊急</option><option value="pinned">永久置頂</option></select></div></div>'+
     '<div class="row2"><div><label>顯示期(天)</label><input id="pDisp" type="number" value="3"></div>'+
@@ -308,6 +331,24 @@ function openPublish(){
     '<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-pri" onclick="doPublish()">發佈</button></div>'+
     '<div class="err" id="pErr"></div></div></div>';
   document.getElementById('pTask').addEventListener('change',function(){document.getElementById('pDeadlineWrap').classList.toggle('hidden',!this.checked);});
+  if(dictateSupported())document.getElementById('micWrap').innerHTML='<button class="mic" id="micBtn" type="button" onclick="toggleDictation(\'pContent\',\'micBtn\')">🎤 語音輸入</button>';
+}
+
+/* ====== 語音輸入(瀏覽器內建,免 key)====== */
+let _rec=null, _recOn=false;
+function dictateSupported(){ return !!(window.SpeechRecognition||window.webkitSpeechRecognition); }
+function toggleDictation(targetId, btnId){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){toast('此瀏覽器不支援語音輸入');return;}
+  if(_recOn){ if(_rec)_rec.stop(); return; }
+  const ta=document.getElementById(targetId), btn=document.getElementById(btnId);
+  const base=ta.value;
+  _rec=new SR(); _rec.lang='zh-TW'; _rec.interimResults=true; _rec.continuous=true;
+  _rec.onstart=()=>{_recOn=true; btn.textContent='⏹ 停止'; btn.classList.add('rec');};
+  _rec.onend=()=>{_recOn=false; btn.textContent='🎤 語音輸入'; btn.classList.remove('rec'); _rec=null;};
+  _rec.onerror=(e)=>{ if(e.error==='not-allowed')toast('請允許麥克風權限'); else toast('語音中斷'); };
+  _rec.onresult=(e)=>{ let txt=''; for(let i=0;i<e.results.length;i++)txt+=e.results[i][0].transcript; ta.value=(base?base+'\n':'')+txt; };
+  _rec.start();
 }
 async function doPublish(){
   const pe=document.getElementById('pErr');pe.textContent='';
