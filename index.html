@@ -109,6 +109,7 @@
   .att-view{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px;}
   .att-thumb{width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--line);}
   .att-pdf{display:inline-flex;align-items:center;gap:4px;background:#eef2f6;color:var(--blue-d);border-radius:8px;padding:8px 12px;font-size:13px;text-decoration:none;}
+  .readall{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff7e6;border:1px solid #ffe69c;color:#8a6d00;border-radius:10px;padding:10px 14px;font-size:14px;margin-bottom:12px;}
 </style>
 </head>
 <body>
@@ -168,6 +169,7 @@
         <button class="mic" type="button" onclick="clearFilter()">清除</button>
       </div>
     </div>
+    <div id="readAllBar" class="hidden readall"></div>
     <div id="noticeList"><div class="spin">載入中…</div></div>
   </div>
   <button id="fabPublish" class="fab hidden" title="可拖曳移動;輕點發佈公告">＋ 發佈公告</button>
@@ -379,6 +381,18 @@ async function doShare(id){
   if(navigator.share){ try{ await navigator.share({title:n.title,text:text}); return; }catch(e){ if(e&&e.name==='AbortError')return; } }
   window.open('https://line.me/R/msg/text/?'+encodeURIComponent(text),'_blank');
 }
+async function aiTidyContent(taId,catId){
+  const ta=document.getElementById(taId); if(!ta)return;
+  const raw=(ta.value||'').trim();
+  if(!raw){toast('請先用🎤語音或打字輸入內容');return;}
+  const c=document.getElementById(catId); const cat=c?c.value:'';
+  toast('AI 整理中…');
+  try{
+    const r=await api('aiTidy',{text:raw,category:cat});
+    if(r&&r.ok&&r.text){ ta.value=r.text; _formDirty=true; toast('已整理 ✓'); }
+    else toast('整理失敗:'+((r&&(r.msg||r.error))||'未知'));
+  }catch(e){ if(e!=='AUTH')toast('連線失敗'); }
+}
 const ATTACH_UI='<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'+
   '<button class="mic" type="button" onclick="document.getElementById(\'attFile\').click()">📎 附加圖片/PDF</button>'+
   '<button class="mic" type="button" onclick="document.getElementById(\'attCam\').click()">📷 拍照</button>'+
@@ -467,6 +481,27 @@ async function loadNotices(silent){
 function renderNotices(list){
   const box=document.getElementById('noticeList');
   box.innerHTML = list.length ? list.map(cardHtml).join('') : '<div class="empty">沒有符合的公告</div>';
+  renderReadAllBar();
+}
+function unreadCount(){ return _notices.filter(n=>!n.read && !n.frozen).length; }
+function renderReadAllBar(){
+  const bar=document.getElementById('readAllBar'); if(!bar)return;
+  const u=unreadCount();
+  if(u>0){ bar.innerHTML='你有 <b>'+u+'</b> 則未閱　<button class="btn btn-pri btn-sm" onclick="doReadAll()">✓ 全部已閱</button>'; bar.classList.remove('hidden'); }
+  else bar.classList.add('hidden');
+}
+async function doReadAll(){
+  const targets=_notices.filter(n=>!n.read && !n.frozen);
+  if(!targets.length)return;
+  if(!confirm('確定已讀過全部 '+targets.length+' 則公告?簽閱後會記錄你的姓名與時間。'))return;
+  const now=nowStr();
+  targets.forEach(n=>{ n.read=true; n.read_at=now; });
+  saveNoticesCache(); onSearch();
+  const results=await Promise.all(targets.map(n=>api('markAsRead',{notice_id:n.id,user_agent:navigator.userAgent,task_done:false}).then(r=>({n,r})).catch(()=>({n,r:null}))));
+  let fail=0;
+  results.forEach(o=>{ if(!o.r||!o.r.ok){ fail++; o.n.read=false; o.n.read_at=''; } });
+  if(fail){ saveNoticesCache(); onSearch(); toast(fail+' 則簽閱失敗,請重試'); }
+  else toast('已全部簽閱 ✓');
 }
 function clearFilter(){
   document.getElementById('searchBox').value='';
@@ -599,7 +634,7 @@ function openPublish(){
     '<div style="display:flex;gap:8px;align-items:center;"><select id="pCat" style="flex:1;" onchange="onCategoryChange()">'+opts+'</select>'+
       '<button class="mic" type="button" onclick="applyTemplate()">📋 套用範本</button></div>'+
     '<div id="catHint" class="mmeta" style="margin-top:6px;min-height:16px;"></div>'+
-    '<label style="display:flex;justify-content:space-between;align-items:center;">內容 <span id="micWrap"></span></label>'+
+    '<label style="display:flex;justify-content:space-between;align-items:center;">內容 <span><button class="mic" type="button" onclick="aiTidyContent(\'pContent\',\'pCat\')">✨ AI整理</button> <span id="micWrap"></span></span></label>'+
     '<textarea id="pContent" rows="7" placeholder="可直接打字、按🎤語音、或用上方「套用範本」帶出格式…" oninput="suggestCategory()"></textarea>'+
     ATTACH_UI+
     '<div style="margin-top:14px;"><a id="advToggle" onclick="toggleAdv()" style="color:var(--blue);font-size:14px;cursor:pointer;">▸ 進階設定(重要性、顯示天數、對象、任務)</a></div>'+
@@ -671,7 +706,7 @@ async function openEdit(id){
     '<div class="mmeta">原發佈:'+esc(n.created_by_name||'')+' · '+esc(fmtDT(n.created_at))+editedLine+'</div>'+
     '<label>標題</label><input id="eTitle" value="'+esc(n.title)+'">'+
     '<label>分類</label><select id="eCat">'+opts+'</select>'+
-    '<label style="display:flex;justify-content:space-between;align-items:center;">內容 <span id="micWrap"></span></label>'+
+    '<label style="display:flex;justify-content:space-between;align-items:center;">內容 <span><button class="mic" type="button" onclick="aiTidyContent(\'eContent\',\'eCat\')">✨ AI整理</button> <span id="micWrap"></span></span></label>'+
     '<textarea id="eContent" rows="8">'+esc(n.content||'')+'</textarea>'+
     ATTACH_UI+
     '<div style="margin-top:14px;"><a id="advToggle" onclick="toggleAdv()" style="color:var(--blue);font-size:14px;cursor:pointer;">▸ 進階設定(重要性、顯示天數、對象、任務、備註)</a></div>'+
