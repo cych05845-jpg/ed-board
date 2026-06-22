@@ -490,7 +490,7 @@ function renderNotices(list){
   renderReadAllBar();
   renderCatChips();
 }
-function unreadCount(){ return _notices.filter(n=>!n.read && !n.frozen).length; }
+function unreadCount(){ return _notices.filter(n=>!n.read && !n.frozen && !n.expired).length; }
 function renderReadAllBar(){
   const bar=document.getElementById('readAllBar'); if(!bar)return;
   const u=unreadCount();
@@ -522,8 +522,9 @@ let _catFilter='';
 function renderCatChips(){
   const box=document.getElementById('catChips'); if(!box)return;
   const counts={};
-  _notices.forEach(n=>{ const c=n.category||'其他'; counts[c]=(counts[c]||0)+1; });
-  let html='<button class="catchip'+(_catFilter===''?' on':'')+'" onclick="setCatFilter(\'\')">全部 '+_notices.length+'</button>';
+  const base=_notices.filter(n=>!n.expired);
+  base.forEach(n=>{ const c=n.category||'其他'; counts[c]=(counts[c]||0)+1; });
+  let html='<button class="catchip'+(_catFilter===''?' on':'')+'" onclick="setCatFilter(\'\')">全部 '+base.length+'</button>';
   html+=Object.keys(counts).map(function(c){return '<button class="catchip'+(_catFilter===c?' on':'')+'" onclick="setCatFilter(\''+c.replace(/\x27/g,'')+'\')">'+esc(c)+' '+counts[c]+'</button>';}).join('');
   box.innerHTML=html;
 }
@@ -533,7 +534,8 @@ function onSearch(){
   const raw=document.getElementById('searchBox').value.trim().toLowerCase();
   const from=document.getElementById('dateFrom').value;   // '' 或 yyyy-MM-dd
   const to=document.getElementById('dateTo').value;
-  let list=_notices;
+  const revealExpired = !!(raw || from || to);   // 關鍵字或日期才翻出過期的
+  let list=_notices.filter(n=> revealExpired ? true : !n.expired);
   if(_catFilter) list=list.filter(n=>(n.category||'其他')===_catFilter);
   if(from) list=list.filter(n=>toYMD(n.created_at)>=from);
   if(to)   list=list.filter(n=>toYMD(n.created_at)<=to);
@@ -810,7 +812,7 @@ async function doPublish(){
     const newN={id:r.id||('nt_'+Date.now()),title:payload.title,content:payload.content,category:payload.category,
       priority:payload.priority,is_task:payload.is_task,task_deadline:payload.task_deadline,
       created_at:nowStr(),created_by_name:session.staff_name,target_audience:payload.target_audience,note:'',attachments:_attachments.slice(),
-      frozen:false,read:false,read_at:'',task_done:false,edited:false,edited_by_name:''};
+      frozen:false,expired:false,read:false,read_at:'',task_done:false,edited:false,edited_by_name:''};
     _notices.unshift(newN);
     document.getElementById('searchWrap').classList.remove('hidden');
     saveNoticesCache();onSearch();
