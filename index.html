@@ -93,6 +93,10 @@
   .daterow input{flex:1;padding:9px 10px;font-size:14px;border:1px solid var(--line);border-radius:8px;}
   .daterow span{color:var(--muted);font-size:14px;}
   .daterow .mic{flex:0 0 auto;white-space:nowrap;}
+  .daterow .apply{background:var(--blue);color:#fff;border-color:var(--blue);}
+  .catchips{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:6px;}
+  .catchip{flex:0 0 auto;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:20px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .catchip.on{background:var(--blue);color:#fff;border-color:var(--blue);}
   .staff-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;}
   .staff-row .nm{font-weight:600;}
   .staff-row .sub{font-size:12px;color:var(--muted);}
@@ -163,11 +167,13 @@
     <div id="searchWrap" class="hidden">
       <input id="searchBox" class="search" placeholder="🔍 關鍵字(含內容,可多字):消毒 4月…" oninput="onSearch()">
       <div class="daterow">
-        <input id="dateFrom" type="date" oninput="onSearch()" aria-label="起始日">
+        <input id="dateFrom" type="date" onchange="onSearch()" aria-label="起始日">
         <span>～</span>
-        <input id="dateTo" type="date" oninput="onSearch()" aria-label="結束日">
+        <input id="dateTo" type="date" onchange="onSearch()" aria-label="結束日">
+        <button class="mic apply" type="button" onclick="onSearch()">查詢</button>
         <button class="mic" type="button" onclick="clearFilter()">清除</button>
       </div>
+      <div id="catChips" class="catchips"></div>
     </div>
     <div id="readAllBar" class="hidden readall"></div>
     <div id="noticeList"><div class="spin">載入中…</div></div>
@@ -482,6 +488,7 @@ function renderNotices(list){
   const box=document.getElementById('noticeList');
   box.innerHTML = list.length ? list.map(cardHtml).join('') : '<div class="empty">沒有符合的公告</div>';
   renderReadAllBar();
+  renderCatChips();
 }
 function unreadCount(){ return _notices.filter(n=>!n.read && !n.frozen).length; }
 function renderReadAllBar(){
@@ -507,14 +514,27 @@ function clearFilter(){
   document.getElementById('searchBox').value='';
   document.getElementById('dateFrom').value='';
   document.getElementById('dateTo').value='';
+  _catFilter='';
+  renderCatChips();
   renderNotices(_notices);
 }
+let _catFilter='';
+function renderCatChips(){
+  const box=document.getElementById('catChips'); if(!box)return;
+  const counts={};
+  _notices.forEach(n=>{ const c=n.category||'其他'; counts[c]=(counts[c]||0)+1; });
+  let html='<button class="catchip'+(_catFilter===''?' on':'')+'" onclick="setCatFilter(\'\')">全部 '+_notices.length+'</button>';
+  html+=Object.keys(counts).map(function(c){return '<button class="catchip'+(_catFilter===c?' on':'')+'" onclick="setCatFilter(\''+c.replace(/\x27/g,'')+'\')">'+esc(c)+' '+counts[c]+'</button>';}).join('');
+  box.innerHTML=html;
+}
+function setCatFilter(c){ _catFilter=c; renderCatChips(); onSearch(); }
 function toYMD(s){var d=new Date(String(s));if(isNaN(d.getTime()))d=new Date(String(s).replace(/-/g,'/'));if(isNaN(d.getTime()))return String(s).slice(0,10);var p=function(n){return String(n).padStart(2,'0');};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());}
 function onSearch(){
   const raw=document.getElementById('searchBox').value.trim().toLowerCase();
   const from=document.getElementById('dateFrom').value;   // '' 或 yyyy-MM-dd
   const to=document.getElementById('dateTo').value;
   let list=_notices;
+  if(_catFilter) list=list.filter(n=>(n.category||'其他')===_catFilter);
   if(from) list=list.filter(n=>toYMD(n.created_at)>=from);
   if(to)   list=list.filter(n=>toYMD(n.created_at)<=to);
   if(raw){
