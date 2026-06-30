@@ -406,13 +406,33 @@ const ATTACH_UI='<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap
   '<input id="attCam" type="file" accept="image/*" capture="environment" style="display:none" onchange="handleFiles(this.files);this.value=\'\'">'+
   '</div><div id="attWrap" class="att-wrap"></div>';
 
+function idEq(a,b){a=String(a==null?'':a).trim();b=String(b==null?'':b).trim();return a===b||(a!==''&&b!==''&&!isNaN(a)&&!isNaN(b)&&Number(a)===Number(b));}
+async function doHide(id){
+  const idx=_notices.findIndex(n=>n.id===id); if(idx<0)return;
+  if(!confirm('要把這則從看板隱藏嗎?(之後用日期或關鍵字搜尋仍可找回)'))return;
+  const p=_notices.slice();
+  _notices[idx].expired=true; _notices[idx].hidden=true; saveNoticesCache(); onSearch();
+  try{ const r=await api('hideNotice',{id});
+    if(!r.ok){ _notices=p; saveNoticesCache(); onSearch(); toast(r.error==='NOT_LEADER'?'僅護理長/組長可隱藏':'隱藏失敗'); return; }
+    toast('已隱藏(搜尋仍可找回)'); loadNotices(true);
+  }catch(e){ _notices=p; saveNoticesCache(); onSearch(); if(e!=='AUTH')toast('連線失敗'); }
+}
+async function doUnhide(id){
+  const idx=_notices.findIndex(n=>n.id===id); if(idx<0)return;
+  _notices[idx].expired=false; _notices[idx].hidden=false; saveNoticesCache(); onSearch();
+  try{ const r=await api('unhideNotice',{id});
+    if(!r.ok){ toast('取消失敗'); }
+    else toast('已回到看板');
+    loadNotices(true);
+  }catch(e){ if(e!=='AUTH')toast('連線失敗'); }
+}
 async function doDelete(id){
   if(!confirm('確定要刪除這則公告嗎?刪除後會從看板移除。'))return;
   const idx=_notices.findIndex(n=>n.id===id);
   const prev = idx>=0 ? _notices.slice() : null;
   if(idx>=0){ _notices.splice(idx,1); saveNoticesCache(); onSearch(); }   // 就地先移除
   try{
-    const r=await api('archiveNotice',{id});
+    const r=await api('deleteNotice',{id});
     if(!r.ok){ if(prev){_notices=prev;saveNoticesCache();onSearch();} toast(r.error==='NOT_LEADER'?'僅護理長/組長可刪除':'刪除失敗'); return; }
     toast('已刪除');
     loadNotices(true);
@@ -565,7 +585,9 @@ function cardHtml(n){
   }else{
     act='<button class="btn btn-pri btn-sm" onclick="doRead(\''+n.id+'\','+(n.is_task?'true':'false')+')">'+(n.is_task?'我已閱讀並完成':'我已閱讀')+'</button>';
   }
-  const editBtn = isAdmin(session.role) ? '<button class="btn btn-ghost btn-sm" onclick="openEdit(\''+n.id+'\')">✏️ 編輯</button>' : '';
+  const canEdit = isAdmin(session.role) || idEq(n.created_by, session.staff_id);
+  const editBtn = canEdit ? '<button class="btn btn-ghost btn-sm" onclick="openEdit(\''+n.id+'\')">✏️ 編輯</button>' : '';
+  const hideBtn = isAdmin(session.role) ? (n.hidden ? '<button class="btn btn-ghost btn-sm" onclick="doUnhide(\''+n.id+'\')">↩ 取消隱藏</button>' : '<button class="btn btn-ghost btn-sm" onclick="doHide(\''+n.id+'\')">🙈 隱藏</button>') : '';
   const delBtn = isAdmin(session.role) ? '<button class="btn btn-warn btn-sm" onclick="doDelete(\''+n.id+'\')">🗑 刪除</button>' : '';
   const leaderBtn = isAdmin(session.role) ? '<button class="btn btn-ghost btn-sm" onclick="openStats(\''+n.id+'\',\''+esc(n.title).replace(/\x27/g,"")+'\')">📊 統計</button>' : '';
   const taskHtml = (n.is_task && n.task_deadline) ? '<div class="card-note">⏰ 截止:'+esc(n.task_deadline)+'</div>' : '';
@@ -585,7 +607,7 @@ function cardHtml(n){
     '<div class="card-content">'+contentHtml+'</div>'+
     attHtml+taskHtml+noteHtml+
     '<div class="card-foot"><span class="card-meta">'+metaTxt+'</span>'+
-      '<span class="card-actions">'+shareBtn+editBtn+delBtn+leaderBtn+act+'</span></div>'+
+      '<span class="card-actions">'+shareBtn+editBtn+hideBtn+delBtn+leaderBtn+act+'</span></div>'+
     '</div>';
 }
 
@@ -764,7 +786,7 @@ async function doSaveEdit(id){
     target_audience:document.getElementById('eAud').value,note:document.getElementById('eNote').value,attachments:JSON.stringify(_attachments)};
   try{
     const r=await api('editNotice',payload);
-    if(!r.ok){ee.textContent=r.error==='NOT_LEADER'?'權限不足':'儲存失敗';return;}
+    if(!r.ok){ee.textContent=(r.error==='NOT_LEADER'||r.error==='NO_PERM')?'只有管理者或原發佈者本人可編輯':'儲存失敗';return;}
     const idx=_notices.findIndex(n=>n.id===id);
     if(idx>=0){
       const n=_notices[idx];
@@ -811,7 +833,7 @@ async function doPublish(){
     if(!r.ok){pe.textContent=r.error==='NOT_LEADER'?'權限不足':'發佈失敗';return;}
     const newN={id:r.id||('nt_'+Date.now()),title:payload.title,content:payload.content,category:payload.category,
       priority:payload.priority,is_task:payload.is_task,task_deadline:payload.task_deadline,
-      created_at:nowStr(),created_by_name:session.staff_name,target_audience:payload.target_audience,note:'',attachments:_attachments.slice(),
+      created_at:nowStr(),created_by_name:session.staff_name,created_by:session.staff_id,hidden:false,target_audience:payload.target_audience,note:'',attachments:_attachments.slice(),
       frozen:false,expired:false,read:false,read_at:'',task_done:false,edited:false,edited_by_name:''};
     _notices.unshift(newN);
     document.getElementById('searchWrap').classList.remove('hidden');
