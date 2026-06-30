@@ -171,6 +171,7 @@
         <span>～</span>
         <input id="dateTo" type="date" onchange="onSearch()" aria-label="結束日">
         <button class="mic apply" type="button" onclick="onSearch()">查詢</button>
+        <button class="mic" id="archiveToggle" type="button" onclick="toggleArchive()">📁 歷史</button>
         <button class="mic" type="button" onclick="clearFilter()">清除</button>
       </div>
       <div id="catChips" class="catchips"></div>
@@ -474,7 +475,7 @@ function renderCached(){
     if(c && c.list && c.list.length){
       _notices=c.list;
       document.getElementById('searchWrap').classList.remove('hidden');
-      renderNotices(_notices);
+      onSearch();
       return true;
     }
   }catch(e){}
@@ -509,6 +510,7 @@ function renderNotices(list){
   box.innerHTML = list.length ? list.map(cardHtml).join('') : '<div class="empty">沒有符合的公告</div>';
   renderReadAllBar();
   renderCatChips();
+  renderArchiveBtn();
 }
 function unreadCount(){ return _notices.filter(n=>!n.read && !n.frozen && !n.expired).length; }
 function renderReadAllBar(){
@@ -535,8 +537,9 @@ function clearFilter(){
   document.getElementById('dateFrom').value='';
   document.getElementById('dateTo').value='';
   _catFilter='';
-  renderCatChips();
-  renderNotices(_notices);
+  _showArchive=false;
+  renderCatChips(); renderArchiveBtn();
+  onSearch();
 }
 let _catFilter='';
 function renderCatChips(){
@@ -549,13 +552,24 @@ function renderCatChips(){
   box.innerHTML=html;
 }
 function setCatFilter(c){ _catFilter=c; renderCatChips(); onSearch(); }
+let _showArchive=false;
+function archiveCount(){ return _notices.filter(n=>n.expired).length; }
+function renderArchiveBtn(){
+  const b=document.getElementById('archiveToggle'); if(!b)return;
+  const c=archiveCount();
+  b.textContent=_showArchive?'📋 回看板':('📁 歷史'+(c?(' '+c):''));
+  b.classList.toggle('apply', _showArchive);
+}
+function toggleArchive(){ _showArchive=!_showArchive; renderArchiveBtn(); onSearch(); }
 function toYMD(s){var d=new Date(String(s));if(isNaN(d.getTime()))d=new Date(String(s).replace(/-/g,'/'));if(isNaN(d.getTime()))return String(s).slice(0,10);var p=function(n){return String(n).padStart(2,'0');};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());}
 function onSearch(){
   const raw=document.getElementById('searchBox').value.trim().toLowerCase();
   const from=document.getElementById('dateFrom').value;   // '' 或 yyyy-MM-dd
   const to=document.getElementById('dateTo').value;
-  const revealExpired = !!(raw || from || to);   // 關鍵字或日期才翻出過期的
-  let list=_notices.filter(n=> revealExpired ? true : !n.expired);
+  const revealExpired = _showArchive || !!(raw || from || to);   // 歷史區、關鍵字或日期才翻出過期的
+  let list = _showArchive
+    ? _notices.filter(n=>n.expired)          // 歷史/已收合區:只看過期或被隱藏的
+    : _notices.filter(n=> revealExpired ? true : !n.expired);
   if(_catFilter) list=list.filter(n=>(n.category||'其他')===_catFilter);
   if(from) list=list.filter(n=>toYMD(n.created_at)>=from);
   if(to)   list=list.filter(n=>toYMD(n.created_at)<=to);
