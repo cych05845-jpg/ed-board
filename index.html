@@ -183,7 +183,7 @@
       </div>
       <div class="daterow" style="margin-top:-6px;">
         <span style="color:var(--muted);font-size:12px;">快選:</span>
-        <button class="mic" type="button" onclick="setDateRange('today')">今天</button>
+        <button class="mic" type="button" onclick="setDateRange('3d')">三日內</button>
         <button class="mic" type="button" onclick="setDateRange('week')">本週</button>
         <button class="mic" type="button" onclick="setDateRange('month')">本月</button>
         <button class="mic" type="button" onclick="setDateRange('3m')">近三月</button>
@@ -576,7 +576,11 @@ function setDateRange(kind){
   const iso=x=>x.getFullYear()+'-'+p(x.getMonth()+1)+'-'+p(x.getDate());
   const today=iso(d);
   let from='';
-  if(kind==='today'){ from=today; }
+  if(kind==='3d'){
+    // 三日內:今天含前 2 天(共 3 個日曆日)
+    const t=new Date(d); t.setDate(d.getDate()-2);
+    from=iso(t);
+  }
   else if(kind==='week'){
     // 本週(週一起算)
     const day=d.getDay(); // 0=日 1=一 …
