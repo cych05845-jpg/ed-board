@@ -35,7 +35,8 @@
   label{display:block;font-size:13px;color:var(--muted);margin:14px 0 6px;}
   input,select,textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;font-size:16px;font-family:inherit;background:#fff;}
   input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);}
-  .login-box .btn{width:100%;margin-top:20px;padding:13px;}
+  .login-box .btn{width:100%;margin-top:20px;padding:16px;font-size:17px;}
+  .login-box form{margin:0;}
   .err{color:var(--urgent);font-size:13px;margin-top:10px;min-height:18px;}
   .card{background:var(--card);border-radius:12px;padding:14px 16px;margin-bottom:12px;box-shadow:var(--shadow);border-left:4px solid transparent;}
   .card-content{white-space:pre-wrap;word-break:break-word;font-size:15px;color:var(--ink);line-height:1.65;margin:4px 0 10px;}
@@ -105,6 +106,19 @@
   .badge-off{background:#eee;color:#999;}
   .badge-leader{background:#e7f1f8;color:var(--blue-d);}
   .badge-role{background:#eef2f6;color:#555;}
+  .doc-row{display:flex;align-items:center;gap:10px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;}
+  .doc-row .ic{font-size:22px;flex:0 0 auto;}
+  .doc-row .info{flex:1;min-width:0;}
+  .doc-row .nm{font-weight:600;word-break:break-all;}
+  .doc-row .sub{font-size:12px;color:var(--muted);}
+  .unread-row{display:flex;gap:10px;align-items:flex-start;padding:11px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;}
+  .unread-row.on{border-color:var(--ok);background:#f2fbf4;}
+  .unread-row .ck{flex:0 0 24px;height:24px;border:2px solid var(--line);border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;margin-top:2px;}
+  .unread-row.on .ck{background:var(--ok);border-color:var(--ok);}
+  .unread-row .info{flex:1;min-width:0;}
+  .unread-row .nm{font-weight:600;font-size:15px;}
+  .unread-row .sub{font-size:12px;color:var(--muted);word-break:break-word;}
+  .doc-row a.dl{flex:0 0 auto;background:var(--blue);color:#fff;border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;text-decoration:none;}
   .att-wrap{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;}
   .att-chip{position:relative;display:inline-flex;align-items:center;background:#eef2f6;border-radius:8px;padding:4px 8px;font-size:12px;}
   .att-chip img{width:48px;height:48px;object-fit:cover;border-radius:6px;}
@@ -123,28 +137,25 @@
   <div class="login-box">
     <h1>急診必看板</h1>
     <div class="sub">ed-board · 嘉基急診</div>
-    <div id="stepId">
+    <form id="stepId" onsubmit="doLogin();return false;">
       <label>員工編號</label>
-      <input id="inStaffId" inputmode="numeric" placeholder="例如 05845" autocomplete="off">
-      <button class="btn btn-pri" onclick="doNext()">繼續</button>
-    </div>
-    <div id="stepPin" class="hidden">
-      <div style="font-size:15px;margin-bottom:4px;">您好,<b id="pinName"></b></div>
-      <label>請輸入 PIN 碼</label>
-      <input id="inPin" type="password" inputmode="numeric" maxlength="6" placeholder="4-6 碼" autocomplete="off">
-      <button class="btn btn-pri" onclick="doLogin()">登入</button>
-      <button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="backToId()">換編號</button>
-    </div>
-    <div id="stepSet" class="hidden">
+      <input id="inStaffId" inputmode="numeric" enterkeyhint="next" placeholder="例如 05845" autocomplete="username">
+      <label>PIN 碼</label>
+      <input id="inPin" type="password" inputmode="numeric" enterkeyhint="go" maxlength="6" placeholder="4-6 碼" autocomplete="current-password">
+      <button type="submit" class="btn btn-pri">登入</button>
+      <div class="sub" style="margin-top:10px;text-align:center;">第一次使用?輸入員工編號後按登入,系統會帶你設定 PIN</div>
+    </form>
+    <div id="stepPin" class="hidden"></div>
+    <form id="stepSet" class="hidden" onsubmit="doSetPin();return false;">
       <div style="font-size:15px;margin-bottom:4px;">首次登入,<b id="setName"></b></div>
       <div class="sub" style="margin:4px 0 0;">請設定一組 4-6 碼 PIN,日後用來登入</div>
       <label>設定 PIN</label>
       <input id="inPin1" type="password" inputmode="numeric" maxlength="6" autocomplete="off">
       <label>再輸入一次</label>
       <input id="inPin2" type="password" inputmode="numeric" maxlength="6" autocomplete="off">
-      <button class="btn btn-pri" onclick="doSetPin()">設定並登入</button>
-      <button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="backToId()">換編號</button>
-    </div>
+      <button type="submit" class="btn btn-pri">設定並登入</button>
+      <button type="button" class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="backToId()">換編號</button>
+    </form>
     <div class="err" id="loginErr"></div>
   </div>
 </div>
@@ -156,6 +167,7 @@
     <div style="text-align:right;">
       <div class="who" id="hdrWho"></div>
       <div style="margin-top:4px;display:flex;gap:6px;justify-content:flex-end;">
+        <button class="btn btn-sm btn-ghost" style="color:#1f2d3d;" onclick="openDocs()">📁 文件</button>
         <button id="btnStaff" class="btn btn-sm btn-ghost hidden" style="color:#1f2d3d;" onclick="openStaffMgr()">👥 員工</button>
         <button class="btn btn-sm btn-ghost" style="color:#1f2d3d;" onclick="logout()">登出</button>
       </div>
@@ -198,6 +210,7 @@ const SESSION_DAYS = 30;
 
 const CATEGORIES = ['感控','儀器','SOP','事件','教學','品管','財管','行政','排班','會議','協尋','任務','其他'];
 
+const DOC_CATEGORIES = ['班表','會議紀錄','教育訓練','表單','SOP','ISO','評鑑','公文','其他'];   // 文件庫分類,可自行增減
 const SHIFTS = [['day','白班'],['evening','小夜'],['night','大夜'],['admin','行政']];
 // 職類(代碼, 顯示名)— 標籤可自己改,改完重傳 index.html 即可,不用部署
 const ROLES  = [['HN','護理長'],['leader','組長'],['rn','護理師'],['tech','技術員'],['an','助理員']];
@@ -296,7 +309,7 @@ function loadSession(){
 async function logout(){ try{await api('logout');}catch(e){} localStorage.removeItem('edboard_session'); session=null; location.reload(); }
 
 /* ====== 登入流程 ====== */
-function backToId(){err('');hide('stepPin');hide('stepSet');show('stepId');}
+function backToId(){err('');hide('stepSet');show('stepId');setTimeout(()=>document.getElementById('inStaffId').focus(),50);}
 async function doNext(){
   err('');
   const id=document.getElementById('inStaffId').value.trim();
@@ -313,15 +326,30 @@ async function doNext(){
 }
 async function doLogin(){
   err('');
+  const id=document.getElementById('inStaffId').value.trim();
   const pin=document.getElementById('inPin').value.trim();
-  if(pin.length<4){err('請輸入 PIN');return;}
+  if(!id){err('請輸入員工編號');document.getElementById('inStaffId').focus();return;}
+  pendingId=id;
+  const btn=document.querySelector('#stepId button[type=submit]');
+  if(btn){btn.disabled=true;btn.textContent='登入中…';}
   try{
-    const r=await api('rnLogin',{staff_id:pendingId,pin});
+    const r=await api('rnLogin',{staff_id:id,pin:pin});
+    if(r.needSetPin){                       // 首次登入 → 轉到設定 PIN
+      document.getElementById('setName').textContent=r.staff_name||'';
+      hide('stepId');show('stepSet');
+      setTimeout(()=>document.getElementById('inPin1').focus(),50);
+      return;
+    }
+    if(r.error==='NO_STAFF'){err('查無此員工編號,請洽護理長');return;}
+    if(r.error==='INACTIVE'){err('帳號未啟用');return;}
+    if(!pin){err('請輸入 PIN 碼');document.getElementById('inPin').focus();return;}
     if(!r.ok){err(r.msg||'登入失敗');return;}
     saveSession({token:r.token,staff_id:r.staff_id,staff_name:r.staff_name,role:r.role,shift:r.shift});
     enterApp();
-  }catch(e){err('連線失敗');}
+  }catch(e){err('連線失敗,請稍後再試');}
+  finally{ if(btn){btn.disabled=false;btn.textContent='登入';} }
 }
+async function doNext(){ return doLogin(); }   // 相容舊呼叫
 async function doSetPin(){
   err('');
   const p1=document.getElementById('inPin1').value.trim();
@@ -522,7 +550,7 @@ function unreadCount(){ return _notices.filter(n=>!n.read && !n.frozen && !n.exp
 function renderReadAllBar(){
   const bar=document.getElementById('readAllBar'); if(!bar)return;
   const u=unreadCount();
-  if(u>0){ bar.innerHTML='你有 <b>'+u+'</b> 則未閱　<button class="btn btn-pri btn-sm" onclick="doReadAll()">✓ 全部已閱</button>'; bar.classList.remove('hidden'); }
+  if(u>0){ bar.innerHTML='你有 <b>'+u+'</b> 則未閱　<button class="btn btn-pri btn-sm" onclick="openUnreadPicker()">✓ 逐則簽閱</button>'; bar.classList.remove('hidden'); }
   else bar.classList.add('hidden');
 }
 async function doReadAll(){
@@ -568,19 +596,70 @@ function renderArchiveBtn(){
 }
 function toggleArchive(){ _showArchive=!_showArchive; renderArchiveBtn(); onSearch(); }
 let _unreadPrompted=false;
+function summaryOf(n){
+  const t=String(n.content||'').replace(/\s+/g,' ').trim();
+  return t ? (t.length>48 ? t.slice(0,48)+'…' : t) : '(無內容)';
+}
 function maybePromptUnread(){
   if(_unreadPrompted)return;
-  const u=unreadCount(); if(!u)return;
+  const list=_notices.filter(n=>!n.read && !n.frozen && !n.expired);
+  if(!list.length)return;
   _unreadPrompted=true;
   const root=document.getElementById('modalRoot');
   if(root.innerHTML.trim())return;   // 已有其他視窗就不打擾
-  root.innerHTML='<div class="modal-bg"><div class="modal" style="max-width:420px;">'+
-    '<h2>你有 '+u+' 則未閱公告</h2>'+
-    '<div class="mmeta" style="margin-bottom:6px;">請確認都看過了,再按下方按鈕完成簽閱。簽閱會記錄你的姓名與時間。</div>'+
-    '<div class="modal-actions" style="flex-direction:column;gap:8px;">'+
-      '<button class="btn btn-pri" onclick="closeModal();doReadAll();">✓ 我已全部閱讀</button>'+
-      '<button class="btn btn-ghost" onclick="closeModal()">先看內容,稍後再簽</button>'+
+  _unreadList=list;
+  renderUnreadPicker();
+}
+let _unreadList=[], _unreadPick={};
+function renderUnreadPicker(){
+  const root=document.getElementById('modalRoot');
+  const rows=_unreadList.map(function(n){
+    const on=!!_unreadPick[n.id];
+    const tag=(n.priority==='urgent'?'<span class="tag tag-urgent">緊急</span> ':'')+
+              (n.is_task?'<span class="tag tag-task">任務</span> ':'')+
+              '<span class="tag tag-cat">'+esc(n.category||'其他')+'</span>';
+    return '<div class="unread-row'+(on?' on':'')+'" onclick="toggleUnreadPick(\''+n.id+'\')">'+
+      '<span class="ck">'+(on?'✓':'')+'</span>'+
+      '<span class="info"><div style="margin-bottom:3px;">'+tag+'</div>'+
+      '<div class="nm">'+esc(n.title)+'</div>'+
+      '<div class="sub">'+esc(summaryOf(n))+'</div>'+
+      '<div class="sub">'+esc(n.created_by_name||'')+' · '+esc(fmtDT(n.created_at))+'</div></span></div>';
+  }).join('');
+  const cnt=Object.keys(_unreadPick).filter(k=>_unreadPick[k]).length;
+  const allOn=cnt===_unreadList.length;
+  root.innerHTML='<div class="modal-bg"><div class="modal">'+
+    '<h2>你有 '+_unreadList.length+' 則未閱</h2>'+
+    '<div class="mmeta">點選你已經看過的公告(可先關閉視窗去看內容)。簽閱會記錄你的姓名與時間。</div>'+
+    '<div style="display:flex;gap:8px;margin:12px 0;">'+
+      '<button class="mic" type="button" onclick="pickAllUnread('+(allOn?'false':'true')+')">'+(allOn?'☐ 取消全選':'☑ 全選')+'</button>'+
+    '</div>'+
+    rows+
+    '<div class="modal-actions" style="position:sticky;bottom:0;background:#fff;padding-top:12px;">'+
+      '<button class="btn btn-ghost" onclick="closeModal()">稍後再簽</button>'+
+      '<button class="btn btn-pri" id="btnSignPick" '+(cnt?'':'disabled')+' onclick="signPicked()">✓ 簽閱所選 '+(cnt?('('+cnt+')'):'')+'</button>'+
     '</div></div></div>';
+}
+function openUnreadPicker(){
+  _unreadList=_notices.filter(n=>!n.read && !n.frozen && !n.expired);
+  if(!_unreadList.length){toast('目前沒有未閱公告');return;}
+  _unreadPick={};
+  renderUnreadPicker();
+}
+function toggleUnreadPick(id){ _unreadPick[id]=!_unreadPick[id]; renderUnreadPicker(); }
+function pickAllUnread(on){ _unreadList.forEach(n=>{_unreadPick[n.id]=on;}); renderUnreadPicker(); }
+async function signPicked(){
+  const targets=_unreadList.filter(n=>_unreadPick[n.id]);
+  if(!targets.length)return;
+  closeModal();
+  const now=nowStr();
+  targets.forEach(n=>{ n.read=true; n.read_at=now; });
+  saveNoticesCache(); onSearch();
+  const results=await Promise.all(targets.map(n=>api('markAsRead',{notice_id:n.id,user_agent:navigator.userAgent,task_done:false}).then(r=>({n,r})).catch(()=>({n,r:null}))));
+  let fail=0;
+  results.forEach(o=>{ if(!o.r||!o.r.ok){ fail++; o.n.read=false; o.n.read_at=''; } });
+  if(fail){ saveNoticesCache(); onSearch(); toast(fail+' 則簽閱失敗,請重試'); }
+  else toast('已簽閱 '+targets.length+' 則 ✓');
+  _unreadPick={};
 }
 function toYMD(s){var d=new Date(String(s));if(isNaN(d.getTime()))d=new Date(String(s).replace(/-/g,'/'));if(isNaN(d.getTime()))return String(s).slice(0,10);var p=function(n){return String(n).padStart(2,'0');};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());}
 function onSearch(){
@@ -906,6 +985,118 @@ async function shareUnread(){
   window.open('https://line.me/R/msg/text/?'+encodeURIComponent(t),'_blank');
 }
 
+/* ====== 文件下載目錄 ====== */
+let _docs=[], _docCat='';
+function docIcon(d){
+  if(d.kind==='link')return '🔗';
+  const m=(d.mime||'')+' '+(d.name||'');
+  if(/pdf/i.test(m))return '📕';
+  if(/sheet|excel|xls|csv/i.test(m))return '📗';
+  if(/word|doc/i.test(m))return '📘';
+  if(/image|png|jpg|jpeg/i.test(m))return '🖼';
+  return '📄';
+}
+function fmtSize(n){ if(!n)return ''; return n>1048576?(n/1048576).toFixed(1)+'MB':Math.round(n/1024)+'KB'; }
+async function openDocs(){
+  const root=document.getElementById('modalRoot');
+  root.innerHTML='<div class="modal-bg"><div class="modal"><div class="spin">載入中…</div></div></div>';
+  try{ const r=await api('listDocs',{}); if(!r.ok){closeModal();toast('載入失敗');return;} _docs=r.docs||[]; }
+  catch(e){ if(e!=='AUTH'){closeModal();toast('載入失敗');} return; }
+  renderDocs();
+}
+function renderDocs(){
+  const root=document.getElementById('modalRoot');
+  const cats={}; _docs.forEach(d=>{const c=d.category||'其他';cats[c]=(cats[c]||0)+1;});
+  let chips='<button class="catchip'+(_docCat===''?' on':'')+'" onclick="setDocCat(\'\')">全部 '+_docs.length+'</button>';
+  chips+=Object.keys(cats).map(c=>'<button class="catchip'+(_docCat===c?' on':'')+'" onclick="setDocCat(\''+c+'\')">'+esc(c)+' '+cats[c]+'</button>').join('');
+  const list=_docCat?_docs.filter(d=>(d.category||'其他')===_docCat):_docs;
+  const rows=list.map(d=>{
+    const canDel = isAdmin(session.role) || idEq(d.created_by, session.staff_id);
+    return '<div class="doc-row"><span class="ic">'+docIcon(d)+'</span>'+
+      '<span class="info"><div class="nm">'+esc(d.name)+'</div>'+
+      '<div class="sub">'+esc(d.category||'其他')+' · '+esc(d.created_by_name||'')+' · '+esc(d.created_at)+(d.size?(' · '+fmtSize(d.size)):'')+'</div>'+
+      (d.note?'<div class="sub">'+esc(d.note)+'</div>':'')+'</span>'+
+      '<a class="dl" href="'+esc(d.view||d.url)+'" target="_blank" rel="noopener">開啟</a>'+
+      (canDel?'<button class="btn btn-warn btn-sm" onclick="doDelDoc(\''+d.id+'\')">🗑</button>':'')+
+      '</div>';
+  }).join('')||'<div class="empty">這個分類還沒有文件</div>';
+  const logBtn = isAdmin(session.role)?'<button class="mic" type="button" onclick="openDocLogs()">📜 異動紀錄</button>':'';
+  root.innerHTML='<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">'+
+    '<button class="x" onclick="closeModal()">×</button><h2>文件下載</h2>'+
+    '<div class="mmeta">班表、表單、SOP、ISO 等常用文件,隨時取用(不會過期)</div>'+
+    '<div style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;">'+
+      '<button class="btn btn-pri btn-sm" onclick="openDocAdd()">＋ 上傳文件</button>'+logBtn+'</div>'+
+    '<div class="catchips">'+chips+'</div>'+rows+'</div></div>';
+}
+function setDocCat(c){ _docCat=c; renderDocs(); }
+function openDocAdd(){
+  const root=document.getElementById('modalRoot');
+  const opts=DOC_CATEGORIES.map(c=>'<option value="'+c+'">'+c+'</option>').join('');
+  root.innerHTML='<div class="modal-bg" onclick="if(event.target===this)openDocs()"><div class="modal">'+
+    '<button class="x" onclick="openDocs()">×</button><h2>上傳文件</h2>'+
+    '<div class="mmeta">可上傳檔案(PDF/Excel/Word/圖片,10MB 內),或貼雲端連結(內容更新後永遠是最新版)</div>'+
+    '<label>分類</label><select id="dCat">'+opts+'</select>'+
+    '<label>顯示名稱</label><input id="dName" placeholder="例如:7月班表">'+
+    '<label>備註(可省略)</label><input id="dNote" placeholder="例如:8/1 起適用">'+
+    '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">'+
+      '<button class="mic" type="button" onclick="document.getElementById(\'dFile\').click()">📎 選擇檔案</button>'+
+      '<input id="dFile" type="file" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv" style="display:none" onchange="onDocFile(this.files)">'+
+    '</div><div id="dFileInfo" class="mmeta" style="margin-top:6px;"></div>'+
+    '<label>或貼上連結</label><input id="dUrl" placeholder="https://docs.google.com/…">'+
+    '<div class="modal-actions"><button class="btn btn-ghost" onclick="openDocs()">取消</button>'+
+      '<button class="btn btn-pri" onclick="doAddDoc()">上傳</button></div>'+
+    '<div class="err" id="dErr"></div></div></div>';
+  _docFile=null;
+}
+let _docFile=null;
+function onDocFile(files){
+  if(!files||!files.length)return;
+  const f=files[0];
+  if(f.size>10*1024*1024){ document.getElementById('dFileInfo').textContent='檔案超過 10MB,請改用連結'; return; }
+  _docFile=f;
+  document.getElementById('dFileInfo').textContent='已選:'+f.name+'('+fmtSize(f.size)+')';
+  const nm=document.getElementById('dName'); if(!nm.value.trim())nm.value=f.name.replace(/\.[^.]+$/,'');
+}
+async function doAddDoc(){
+  const de=document.getElementById('dErr'); de.textContent='';
+  const name=document.getElementById('dName').value.trim();
+  const url=document.getElementById('dUrl').value.trim();
+  const category=document.getElementById('dCat').value;
+  const note=document.getElementById('dNote').value.trim();
+  if(!name){de.textContent='請輸入顯示名稱';return;}
+  if(!_docFile && !url){de.textContent='請選擇檔案或貼上連結';return;}
+  try{
+    let payload;
+    if(_docFile){
+      const dataUrl=await readDataUrl(_docFile);
+      payload={kind:'file',name:name,category:category,note:note,mime:_docFile.type,size:_docFile.size,data:dataUrl.split(',')[1]};
+      toast('上傳中…');
+    } else payload={kind:'link',name:name,category:category,note:note,url:url};
+    const r=await api('addDoc',payload);
+    if(!r.ok){de.textContent='上傳失敗:'+((r&&(r.msg||r.error))||'未知');return;}
+    toast('已上傳 ✓'); openDocs();
+  }catch(e){ if(e!=='AUTH')de.textContent='連線失敗'; }
+}
+async function doDelDoc(id){
+  if(!confirm('確定刪除這份文件?(異動會留下紀錄)'))return;
+  try{
+    const r=await api('deleteDoc',{id});
+    if(!r.ok){ toast(r.error==='NO_PERM'?'只有管理者或上傳者本人可刪除':'刪除失敗'); return; }
+    toast('已刪除'); openDocs();
+  }catch(e){ if(e!=='AUTH')toast('連線失敗'); }
+}
+async function openDocLogs(){
+  const root=document.getElementById('modalRoot');
+  root.innerHTML='<div class="modal-bg"><div class="modal"><div class="spin">載入中…</div></div></div>';
+  let r; try{ r=await api('listDocLogs',{}); }catch(e){ if(e!=='AUTH'){openDocs();} return; }
+  if(!r.ok){openDocs();toast('權限不足');return;}
+  const rows=(r.logs||[]).map(l=>'<div class="doc-row"><span class="info"><div class="nm">'+esc(l.doc_name)+'</div>'+
+    '<div class="sub">'+esc(l.action)+' · '+esc(l.staff_name)+' · '+esc(l.at)+'</div></span></div>').join('')||'<div class="empty">尚無紀錄</div>';
+  root.innerHTML='<div class="modal-bg" onclick="if(event.target===this)openDocs()"><div class="modal">'+
+    '<button class="x" onclick="openDocs()">×</button><h2>文件異動紀錄</h2>'+
+    '<div class="mmeta">最近 200 筆上傳/刪除紀錄</div><div style="margin-top:12px;">'+rows+'</div></div></div>';
+}
+
 /* ====== Leader 員工管理 ====== */
 async function openStaffMgr(){
   const root=document.getElementById('modalRoot');
@@ -983,8 +1174,7 @@ async function doResetPin(staff_id,name){
 (function init(){
   const s=loadSession();
   if(s){session=s;enterApp();}
-  document.getElementById('inStaffId').addEventListener('keydown',e=>{if(e.key==='Enter')doNext();});
-  document.getElementById('inPin').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  if(!s){ setTimeout(()=>{const el=document.getElementById('inStaffId'); if(el)el.focus();},100); }
 })();
 </script>
 </body>
