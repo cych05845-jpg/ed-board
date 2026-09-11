@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
+<!-- PWA:可安裝到主畫面 -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1d6fa5">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="必看板">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
 <title>急診必看板 ed-board</title>
 <style>
   :root{
@@ -106,6 +115,7 @@
   .badge-off{background:#eee;color:#999;}
   .badge-leader{background:#e7f1f8;color:var(--blue-d);}
   .badge-role{background:#eef2f6;color:#555;}
+  .install-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#e7f1f8;border:1px solid #c9e0f0;color:var(--blue-d);border-radius:10px;padding:10px 14px;font-size:14px;margin-bottom:12px;}
   .unread-row{display:flex;gap:10px;align-items:flex-start;padding:11px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;}
   .unread-row.on{border-color:var(--ok);background:#f2fbf4;}
   .unread-row .ck{flex:0 0 24px;height:24px;border:2px solid var(--line);border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;margin-top:2px;}
@@ -174,6 +184,13 @@
     </div>
   </header>
   <div class="wrap">
+    <div id="installBar" class="hidden install-bar">
+      <span>📲 把「急診必看板」加到主畫面,開啟更快</span>
+      <span style="display:flex;gap:6px;flex:0 0 auto;">
+        <button class="btn btn-sm btn-pri" onclick="doInstall()">安裝</button>
+        <button class="btn btn-sm btn-ghost" onclick="hideInstall()">不用</button>
+      </span>
+    </div>
     <div id="guideBar" class="hidden guide"></div>
     <div id="staleWarn" class="hidden stale">ℹ️ 目前以相容模式顯示內容(線上後端為舊版,載入稍慢)。有空時重新部署 Code.gs 可加速,但不影響使用。</div>
     <div id="searchWrap" class="hidden">
@@ -1301,6 +1318,31 @@ async function doResetPin(staff_id,name){
     if(!r.ok){toast('重設失敗');return;}
     toast(name+' 的 PIN 已重設');openStaffMgr();
   }catch(e){if(e!=='AUTH')toast('連線失敗');}
+}
+
+/* ====== PWA:註冊 service worker + 安裝提示 ====== */
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  });
+}
+let _installEvt=null;
+window.addEventListener('beforeinstallprompt',function(e){
+  e.preventDefault(); _installEvt=e;
+  if(localStorage.getItem('edboard_install_hide')==='1')return;
+  const b=document.getElementById('installBar');
+  if(b){ b.classList.remove('hidden'); }
+});
+async function doInstall(){
+  if(!_installEvt)return;
+  _installEvt.prompt();
+  try{ await _installEvt.userChoice; }catch(e){}
+  _installEvt=null;
+  document.getElementById('installBar').classList.add('hidden');
+}
+function hideInstall(){
+  localStorage.setItem('edboard_install_hide','1');
+  document.getElementById('installBar').classList.add('hidden');
 }
 
 /* ====== 啟動 ====== */
