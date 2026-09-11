@@ -533,6 +533,12 @@ function initFabDrag(){
 
 /* ====== 公告列表 ====== */
 let _notices=[];
+async function prefetchDocs(){
+  try{
+    const r=await api('listDocs',{});
+    if(r&&r.ok){ _docs=r.docs||[]; localStorage.setItem('edboard_docs',JSON.stringify({list:_docs,t:Date.now()})); }
+  }catch(e){}
+}
 let _historyLoaded=false, _historyLoading=false;
 async function loadHistory(){
   if(_historyLoaded||_historyLoading)return;
@@ -583,6 +589,7 @@ async function loadNotices(silent){
     saveNoticesCache();
     clearFilter();
     setTimeout(loadHistory,1200);          // 背景默默補歷史,不擋畫面
+    setTimeout(prefetchDocs,2000);         // 背景預抓文件清單,之後開文件/引用文件都是秒開
   }catch(e){if(e!=='AUTH'&&!silent)box.innerHTML='<div class="empty">載入失敗,請重整</div>';}
 }
 function renderNotices(list){
@@ -1022,17 +1029,27 @@ async function doPublish(){
     display_days:Number(document.getElementById('pDisp').value)||3,
     read_validity_days:Number(document.getElementById('pValid').value)||14,
     target_audience:document.getElementById('pAud').value,attachments:JSON.stringify(_attachments)};
-  try{
-    const r=await api('publishNotice',payload);
-    if(!r.ok){pe.textContent=r.error==='NOT_LEADER'?'權限不足':'發佈失敗';return;}
-    const newN={id:r.id||('nt_'+Date.now()),title:payload.title,content:payload.content,category:payload.category,
+  // 畫面先反應:立刻關視窗、卡片馬上出現,後端在背景送出
+  const tmpId='tmp_'+Date.now();
+  const newN={id:tmpId,title:payload.title,content:payload.content,category:payload.category,
       priority:payload.priority,is_task:payload.is_task,task_deadline:payload.task_deadline,
       created_at:nowStr(),created_by_name:session.staff_name,created_by:session.staff_id,hidden:false,target_audience:payload.target_audience,note:'',attachments:_attachments.slice(),
       frozen:false,expired:false,read:false,read_at:'',task_done:false,edited:false,edited_by_name:''};
-    _notices.unshift(newN);
-    document.getElementById('searchWrap').classList.remove('hidden');
-    saveNoticesCache();onSearch();
-    toast('已發佈 ✓');closeModal();
+  _notices.unshift(newN);
+  document.getElementById('searchWrap').classList.remove('hidden');
+  saveNoticesCache();onSearch();
+  _formDirty=false; closeModal(); toast('發佈中…');
+  try{
+    const r=await api('publishNotice',payload);
+    if(!r.ok){
+      const i=_notices.findIndex(n=>n.id===tmpId);
+      if(i>=0){_notices.splice(i,1);saveNoticesCache();onSearch();}
+      toast(r.error==='NOT_LEADER'?'權限不足,未發佈':'發佈失敗,請重試');
+      return;
+    }
+    const i=_notices.findIndex(n=>n.id===tmpId);
+    if(i>=0){ _notices[i].id=r.id||tmpId; saveNoticesCache(); }
+    toast('已發佈 ✓');
     loadNotices(true);   // 背景同步(取得正確排序/時間)
   }catch(e){if(e!=='AUTH')pe.textContent='連線失敗';}
 }
@@ -1124,11 +1141,20 @@ function setDocCat(c){ _docCat=c; renderDocs(); }
 let _pickedDocIds = new Set();
 async function openDocPicker(targetTextareaId){
   const root=document.getElementById('pickerRoot');
-  root.innerHTML='<div class="modal-bg" style="z-index:60;"><div class="modal"><div class="spin">載入中…</div></div></div>';
-  try{ const r=await api('listDocs',{}); if(!r.ok){ toast('載入失敗'); closePicker(); return; } _docs=r.docs||[]; }
-  catch(e){ if(e!=='AUTH'){ toast('載入失敗'); closePicker(); } return; }
   _pickedDocIds = new Set();
-  renderDocPicker(targetTextareaId);
+  let shown=false;
+  try{                                     // 先用快取立刻開,不等後端
+    const c=JSON.parse(localStorage.getItem('edboard_docs')||'null');
+    if(c&&c.list&&c.list.length){ _docs=c.list; renderDocPicker(targetTextareaId); shown=true; }
+  }catch(e){}
+  if(!shown) root.innerHTML='<div class="modal-bg" style="z-index:60;"><div class="modal"><div class="spin">載入中…</div></div></div>';
+  try{
+    const r=await api('listDocs',{});
+    if(!r.ok){ if(!shown){ toast('載入失敗'); closePicker(); } return; }
+    _docs=r.docs||[];
+    try{ localStorage.setItem('edboard_docs',JSON.stringify({list:_docs,t:Date.now()})); }catch(e){}
+    if(document.getElementById('pickerRoot').innerHTML.trim()) renderDocPicker(targetTextareaId);
+  }catch(e){ if(e!=='AUTH'&&!shown){ toast('載入失敗'); closePicker(); } }
 }
 function closePicker(){ document.getElementById('pickerRoot').innerHTML=''; }
 function renderDocPicker(targetId){
