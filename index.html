@@ -151,20 +151,25 @@
       <label>員工編號</label>
       <input id="inStaffId" inputmode="numeric" enterkeyhint="next" placeholder="例如 05845" autocomplete="username">
       <label>PIN 碼</label>
-      <input id="inPin" type="password" inputmode="numeric" enterkeyhint="go" maxlength="6" placeholder="4-6 碼" autocomplete="current-password">
+      <input id="inPin" type="password" inputmode="numeric" enterkeyhint="go" maxlength="8" placeholder="帳號中心的 PIN" autocomplete="current-password">
       <button type="submit" class="btn btn-pri">登入</button>
-      <div class="sub" style="margin-top:10px;text-align:center;">第一次使用?輸入員工編號後按登入,系統會帶你設定 PIN</div>
+      <div class="sub" style="margin-top:12px;text-align:center;line-height:1.7;">使用<b>帳號中心</b>的帳號登入,各系統共用<br>還沒設過 PIN?PIN 先輸入<b>自己的員編</b></div>
     </form>
     <div id="stepPin" class="hidden"></div>
     <form id="stepSet" class="hidden" onsubmit="doSetPin();return false;">
-      <div style="font-size:15px;margin-bottom:4px;">首次登入,<b id="setName"></b></div>
-      <div class="sub" style="margin:4px 0 0;">請設定一組 4-6 碼 PIN,日後用來登入</div>
-      <label>設定 PIN</label>
-      <input id="inPin1" type="password" inputmode="numeric" maxlength="6" autocomplete="off">
+      <div style="font-size:15px;margin-bottom:4px;"><b id="setName"></b>,請設定自己的 PIN</div>
+      <div class="sub" style="margin:4px 0 0;line-height:1.7;">已讀簽閱要能證明是本人,所以第一次登入要把 PIN 從員編改成自己的。改好之後,其他院內系統也一起用這組新 PIN。</div>
+      <div id="oldPinWrap" class="hidden">
+        <label>目前的 PIN(沒改過就是員編)</label>
+        <input id="inPinOld" type="password" inputmode="numeric" maxlength="8" autocomplete="current-password">
+      </div>
+      <label>新 PIN</label>
+      <input id="inPin1" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password">
       <label>再輸入一次</label>
-      <input id="inPin2" type="password" inputmode="numeric" maxlength="6" autocomplete="off">
+      <input id="inPin2" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password">
+      <div class="sub" style="margin-top:8px;">4–8 位數字;不能用員編或員編末幾碼、同一個數字、連續數字</div>
       <button type="submit" class="btn btn-pri">設定並登入</button>
-      <button type="button" class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="backToId()">換編號</button>
+      <button type="button" class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="logout()">換一個帳號</button>
     </form>
     <div class="err" id="loginErr"></div>
   </div>
@@ -178,7 +183,7 @@
       <div class="who" id="hdrWho"></div>
       <div style="margin-top:4px;display:flex;gap:6px;justify-content:flex-end;">
         <button class="btn btn-sm btn-ghost" style="color:#1f2d3d;" onclick="openDocs()">📁 文件</button>
-        <button id="btnStaff" class="btn btn-sm btn-ghost hidden" style="color:#1f2d3d;" onclick="openStaffMgr()">👥 員工</button>
+        <button id="btnStaff" class="btn btn-sm btn-ghost" style="color:#1f2d3d;" onclick="openAccountCenter()" title="改 PIN、管理帳號">🔑 帳號</button>
         <button class="btn btn-sm btn-ghost" style="color:#1f2d3d;" onclick="logout()">登出</button>
       </div>
     </div>
@@ -272,6 +277,10 @@ const CATEGORY_HINTS = {
   '財管':['請款','預算','成本','耗材費','費用'],
   '任務':['任務','繳交','回填','填寫','請於']
 };
+// 帳號中心(各院內程式共用登入)
+const ACCOUNT_URL  = 'https://script.google.com/macros/s/AKfycbxRaXVY1dTlfuJKlsrg1d_mg7qDVAc0Ezos1ATMdENiyl-IiCRs9a7dOU1Ftl9INWZu/exec';
+const ACCOUNT_PAGE = 'https://cych05845-jpg.github.io/ed-account/';
+const ACCT_KEY     = 'cych_ed_account';   // 與帳號中心共用的登入資料(同一網域,登入一次各系統通用)
 /* ═══════════════════ 設定區結束 ═══════════════════ */
 
 /* ====== 狀態 ====== */
@@ -286,9 +295,21 @@ async function api(action, payload){
   const r = await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
   const data = await r.json();
   if(data && (data.error==='NO_AUTH' || data.error==='EXPIRED')){ authFail(); throw 'AUTH'; }
+  if(data && data.error==='MUST_CHANGE_PIN'){ showSetPin(session&&session.staff_name, ''); throw 'AUTH'; }
+  if(data && data.error==='ACCOUNT_DOWN'){ toast(data.msg||'暫時連不到帳號中心'); throw 'AUTH'; }
   return data;
 }
-function authFail(){ localStorage.removeItem('edboard_session'); session=null; toast('登入已過期,請重新登入'); setTimeout(()=>location.reload(),1200); }
+function authFail(){ acctClear(); session=null; toast('登入已過期,請重新登入'); setTimeout(()=>location.reload(),1200); }
+/* ── 帳號中心 ── */
+async function acctApi(action, body){
+  const r=await fetch(ACCOUNT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({},body||{},{action}))});
+  if(!r.ok) throw new Error('連不到帳號中心('+r.status+'),請稍後再試');
+  return r.json();
+}
+function acctGet(){ try{ const a=JSON.parse(localStorage.getItem(ACCT_KEY)||'null'); return (a&&a.token&&a.exp>Date.now())?a:null; }catch(e){ return null; } }
+function acctSet(a){ try{ a?localStorage.setItem(ACCT_KEY,JSON.stringify(a)):localStorage.removeItem(ACCT_KEY); }catch(e){} }
+function acctClear(){ acctSet(null); try{ localStorage.removeItem('edboard_session'); }catch(e){} }
+function openAccountCenter(){ window.open(ACCOUNT_PAGE+'?back='+encodeURIComponent(location.href.split('#')[0]),'_blank'); }
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function nl2br(s){
   // 先 escape,再把換行變 <br>,最後把 URL 變可點連結
@@ -330,78 +351,87 @@ function shiftLabel(v){const f=SHIFTS.find(x=>x[0]===v);return f?f[1]:(v||'');}
 function roleLabel(v){const f=ROLES.find(x=>x[0]===v);return f?f[1]:(v||'');}
 function isAdmin(role){return ADMIN_ROLES.indexOf(String(role||'').trim())>=0;}
 
-/* ====== Session ====== */
-function saveSession(s){ session=s; localStorage.setItem('edboard_session',JSON.stringify({...s,exp:Date.now()+SESSION_DAYS*86400000})); }
+/* ====== Session ======
+   登入憑證由帳號中心發給,存在共用的 ACCT_KEY;edboard_session 只是個人資料的快取(秒開用) */
+function saveSession(s){ session=s; try{ localStorage.setItem('edboard_session',JSON.stringify(s)); }catch(e){} }
 function loadSession(){
-  try{const raw=localStorage.getItem('edboard_session');if(!raw)return null;
-    const s=JSON.parse(raw);
-    if(!s.token || !s.exp || s.exp<Date.now())return null;   // 沒 token(舊版)或過期 → 重登
-    return s;}catch(e){return null;}
+  const a=acctGet(); if(!a) return null;
+  try{ const s=JSON.parse(localStorage.getItem('edboard_session')||'null'); return (s&&s.token===a.token)?s:null; }catch(e){ return null; }
 }
-async function logout(){ try{await api('logout');}catch(e){} localStorage.removeItem('edboard_session'); session=null; location.reload(); }
+async function logout(){
+  const t=(session&&session.token)||(acctGet()||{}).token;
+  try{ if(t) await api('logout',{token:t}); }catch(e){}
+  try{ if(t) await acctApi('logout',{token:t}); }catch(e){}
+  acctClear(); session=null; location.reload();
+}
 
-/* ====== 登入流程 ====== */
+/* ====== 登入流程(帳號中心)====== */
+let _typedPin='';
 function backToId(){err('');hide('stepSet');show('stepId');setTimeout(()=>document.getElementById('inStaffId').focus(),50);}
-async function doNext(){
-  err('');
-  const id=document.getElementById('inStaffId').value.trim();
-  if(!id){err('請輸入員工編號');return;}
-  pendingId=id;
-  try{
-    const r=await api('rnLogin',{staff_id:id,pin:''});
-    if(r.needSetPin){document.getElementById('setName').textContent=r.staff_name||'';hide('stepId');show('stepSet');return;}
-    if(r.error==='NO_STAFF'){err('查無此員工編號,請洽護理長');return;}
-    if(r.error==='INACTIVE'){err('帳號未啟用');return;}
-    document.getElementById('pinName').textContent='';
-    hide('stepId');show('stepPin');document.getElementById('inPin').focus();
-  }catch(e){err('連線失敗,請稍後再試');}
+function showSetPin(name, knownPin){
+  _typedPin=knownPin||'';
+  hide('appScreen'); show('loginScreen'); hide('stepId'); show('stepSet'); err('');
+  document.getElementById('setName').textContent=name||'';
+  document.getElementById('oldPinWrap').classList.toggle('hidden', !!_typedPin);
+  setTimeout(()=>document.getElementById(_typedPin?'inPin1':'inPinOld').focus(),50);
+}
+/** 用帳號中心的憑證向必看板確認身分,成功就進入 */
+async function finishLogin(token){
+  const r=await api('whoami',{token});
+  if(!r||!r.ok||!r.user){ err((r&&r.msg)||'登入失敗'); return; }
+  saveSession(Object.assign({token}, r.user));
+  enterApp();
 }
 async function doLogin(){
   err('');
   const id=document.getElementById('inStaffId').value.trim();
   const pin=document.getElementById('inPin').value.trim();
   if(!id){err('請輸入員工編號');document.getElementById('inStaffId').focus();return;}
-  pendingId=id;
+  if(!pin){err('請輸入 PIN(還沒設過就輸入自己的員編)');document.getElementById('inPin').focus();return;}
   const btn=document.querySelector('#stepId button[type=submit]');
   if(btn){btn.disabled=true;btn.textContent='登入中…';}
   try{
-    const r=await api('rnLogin',{staff_id:id,pin:pin});
-    if(r.needSetPin){
-      document.getElementById('setName').textContent=r.staff_name||'';
-      hide('stepId');show('stepSet');
-      setTimeout(()=>document.getElementById('inPin1').focus(),50);
-      return;
-    }
-    if(r.error==='NO_STAFF'){err('查無此員工編號,請洽護理長');return;}
-    if(r.error==='INACTIVE'){err('帳號未啟用');return;}
-    if(!pin){err('請輸入 PIN 碼');document.getElementById('inPin').focus();return;}
-    if(!r.ok){err(r.msg||'登入失敗');return;}
-    saveSession({token:r.token,staff_id:r.staff_id,staff_name:r.staff_name,role:r.role,shift:r.shift});
-    enterApp();
-  }catch(e){err('連線失敗,請稍後再試');}
+    const r=await acctApi('login',{empId:id,pin});
+    if(!r.ok){ err(r.error||'登入失敗'); return; }
+    acctSet({token:r.token, exp:r.exp, user:r.user});
+    if(r.user && r.user.mustChange){ showSetPin(r.user.name, pin); return; }   // 先改 PIN 才能進
+    await finishLogin(r.token);
+  }catch(e){ if(e!=='AUTH') err(e&&e.message?e.message:'連線失敗,請稍後再試'); }
   finally{ if(btn){btn.disabled=false;btn.textContent='登入';} }
 }
 async function doNext(){ return doLogin(); }
 async function doSetPin(){
   err('');
+  const a=acctGet(); if(!a){ backToId(); err('登入已過期,請重新登入'); return; }
+  const oldPin=_typedPin||document.getElementById('inPinOld').value.trim();
   const p1=document.getElementById('inPin1').value.trim();
   const p2=document.getElementById('inPin2').value.trim();
-  if(p1.length<4||p1.length>6){err('PIN 需 4-6 碼');return;}
-  if(p1!==p2){err('兩次輸入不一致');return;}
+  if(!oldPin){err('請輸入目前的 PIN');return;}
+  if(!/^\d{4,8}$/.test(p1)){err('新 PIN 要 4 到 8 位數字');return;}
+  if(p1!==p2){err('兩次輸入的新 PIN 不一樣');return;}
+  const btn=document.querySelector('#stepSet button[type=submit]');
+  if(btn){btn.disabled=true;btn.textContent='設定中…';}
   try{
-    const r=await api('setPin',{staff_id:pendingId,pin:p1});
-    if(!r.ok){err(r.msg||'設定失敗');return;}
-    saveSession({token:r.token,staff_id:r.staff_id,staff_name:r.staff_name,role:r.role,shift:r.shift});
-    enterApp();
-  }catch(e){err('連線失敗');}
+    const r=await acctApi('changePin',{token:a.token, oldPin, newPin:p1});
+    if(!r.ok){
+      err(r.error||'設定失敗');
+      if(/目前的 PIN/.test(r.error||'')){ _typedPin=''; document.getElementById('oldPinWrap').classList.remove('hidden'); }
+      return;
+    }
+    a.user=r.user; acctSet(a); _typedPin='';
+    toast('PIN 已設定,其他系統也改用這組新 PIN');
+    await finishLogin(a.token);
+  }catch(e){ if(e!=='AUTH') err(e&&e.message?e.message:'連線失敗'); }
+  finally{ if(btn){btn.disabled=false;btn.textContent='設定並登入';} }
 }
 
 /* ====== 進入主畫面 ====== */
 function enterApp(){
   hide('loginScreen');show('appScreen');
-  document.getElementById('hdrWho').textContent=session.staff_name+(roleLabel(session.role)?(' · '+roleLabel(session.role)):'');
+  const _t=session.title||roleLabel(session.role);
+  hide('loginScreen');
+  document.getElementById('hdrWho').textContent=session.staff_name+(_t?(' · '+_t):'');
   show('fabPublish');initFabDrag();          // 人人可發佈
-  if(isAdmin(session.role)){show('btnStaff');} // 帳號管理僅管理者
   renderGuide();
   const hadCache=renderCached();
   loadNotices(hadCache);
@@ -995,20 +1025,23 @@ async function doSaveEdit(id){
     display_days:Number(document.getElementById('eDisp').value)||3,
     read_validity_days:Number(document.getElementById('eValid').value)||14,
     target_audience:document.getElementById('eAud').value,note:document.getElementById('eNote').value,attachments:JSON.stringify(_attachments)};
+  // 畫面先更新、立刻關窗;後端在背景寫入,失敗才還原
+  const idx=_notices.findIndex(n=>n.id===id);
+  const before=idx>=0?Object.assign({},_notices[idx]):null;
+  if(idx>=0){
+    const n=_notices[idx];
+    n.title=payload.title;n.content=payload.content;n.category=payload.category;n.priority=payload.priority;
+    n.is_task=payload.is_task;n.task_deadline=payload.task_deadline;n.note=payload.note;n.target_audience=payload.target_audience;
+    n.edited=true;n.edited_by_name=session.staff_name;n.updated_at=nowStr();n.attachments=_attachments.slice();
+    saveNoticesCache();onSearch();
+  }
+  _formDirty=false; closeModal(); toast('儲存中…');
+  const undo=()=>{ if(idx>=0&&before){ _notices[idx]=before; saveNoticesCache(); onSearch(); } };
   try{
     const r=await api('editNotice',payload);
-    if(!r.ok){ee.textContent=(r.error==='NOT_LEADER'||r.error==='NO_PERM')?'只有管理者或原發佈者本人可編輯':'儲存失敗';return;}
-    const idx=_notices.findIndex(n=>n.id===id);
-    if(idx>=0){
-      const n=_notices[idx];
-      n.title=payload.title;n.content=payload.content;n.category=payload.category;n.priority=payload.priority;
-      n.is_task=payload.is_task;n.task_deadline=payload.task_deadline;n.note=payload.note;n.target_audience=payload.target_audience;
-      n.edited=true;n.edited_by_name=session.staff_name;n.updated_at=nowStr();n.attachments=_attachments.slice();
-      saveNoticesCache();onSearch();
-    }
-    toast('已儲存修改 ✓');closeModal();
-    loadNotices(true);   // 背景同步
-  }catch(e){if(e!=='AUTH')ee.textContent='連線失敗';}
+    if(!r.ok){ undo(); toast(r.msg||'儲存失敗,請再試一次'); return; }
+    toast('已儲存修改 ✓');
+  }catch(e){ undo(); if(e!=='AUTH')toast('連線失敗,修改沒有存到'); }
 }
 
 /* ====== 語音輸入(瀏覽器內建,免 key)====== */
@@ -1399,10 +1432,24 @@ function hideInstall(){
 }
 
 /* ====== 啟動 ====== */
-(function init(){
+(async function init(){
+  const a=acctGet();
+  if(!a){                                  // 沒有帳號中心憑證 → 顯示登入
+    try{ localStorage.removeItem('edboard_session'); }catch(e){}
+    setTimeout(()=>{const el=document.getElementById('inStaffId'); if(el)el.focus();},100);
+    return;
+  }
   const s=loadSession();
-  if(s){session=s;enterApp();}
-  if(!s){ setTimeout(()=>{const el=document.getElementById('inStaffId'); if(el)el.focus();},100); }
+  if(s){                                   // 秒開:先用快取的身分進入,背景再確認一次(權限有變會更新)
+    session=s; enterApp();
+    try{
+      const r=await api('whoami',{});
+      if(r&&r.ok&&r.user&&(r.user.role!==s.role||r.user.title!==s.title)){ saveSession(Object.assign({token:a.token},r.user)); location.reload(); }
+    }catch(e){}
+    return;
+  }
+  if(a.user && a.user.mustChange){ showSetPin(a.user.name,''); return; }
+  try{ await finishLogin(a.token); }catch(e){}       // 在其他系統登入過 → 直接進入
 })();
 </script>
 </body>
