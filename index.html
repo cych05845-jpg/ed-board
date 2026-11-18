@@ -411,7 +411,7 @@ function renderGuide(){
   if(localStorage.getItem('edboard_guide_hide')==='1'){ g.classList.add('hidden'); return; }
   const txt = isAdmin(session.role)
     ? '👋 操作:右下「＋發佈公告」新增;每張卡可「✏️ 編輯」「🗑 刪除」「📊 統計」。看完也請按「我已閱讀」。'
-    : '👋 操作:看完每則按「我已閱讀」完成簽閱。你也可以用右下「＋發佈公告」發佈交班事項(會自動署上你的名字)。';
+    : '👋 操作:看完每則按「我已閱讀」完成簽閱。你也可以用右下「＋發佈公告」發佈交班事項,或按「✏️ 編輯」補充任何一則(都會自動署上你的名字)。';
   g.innerHTML=txt+'<button class="guide-x" onclick="dismissGuide()" aria-label="關閉">×</button>';
   g.classList.remove('hidden');
 }
@@ -574,7 +574,17 @@ async function loadNotices(silent){
     const stale = _notices.length>0 && _notices.every(n=>n.edited===undefined);
     document.getElementById('staleWarn').classList.toggle('hidden', !(stale && isAdmin(session.role)));
     const sw=document.getElementById('searchWrap');
-    if(!_notices.length){ sw.classList.add('hidden'); box.innerHTML='<div class="empty">目前沒有公告</div>'; saveNoticesCache(); return; }
+    if(!_notices.length){
+      // 板上沒有「顯示期內」的公告,但歷史仍在 → 保留搜尋與歷史入口,別讓畫面變死路
+      sw.classList.remove('hidden');
+      box.innerHTML='<div class="empty">近期沒有新公告<br><br>舊公告都還在,可按上方 <b>📁 歷史</b>,或用關鍵字、日期查詢。</div>';
+      _historyLoaded=false;
+      saveNoticesCache();
+      renderCatChips(); renderArchiveBtn();
+      setTimeout(loadHistory,300);
+      setTimeout(prefetchDocs,1500);
+      return;
+    }
     if(stale){
       // 舊後端的列表不帶內容 → 逐則補抓詳情(背景更新時不洗掉畫面)
       if(!silent) box.innerHTML='<div class="spin">載入內容中…</div>';
@@ -786,7 +796,7 @@ function cardHtml(n){
   }else{
     act='<button class="btn btn-pri btn-sm" onclick="doRead(\''+n.id+'\','+(n.is_task?'true':'false')+')">'+(n.is_task?'我已閱讀並完成':'我已閱讀')+'</button>';
   }
-  const canEdit = isAdmin(session.role) || idEq(n.created_by, session.staff_id);
+  const canEdit = true;   // 人人可編輯(會記錄誰修改,原文自動備份);刪除/隱藏仍限管理者
   const editBtn = canEdit ? '<button class="btn btn-ghost btn-sm" onclick="openEdit(\''+n.id+'\')">✏️ 編輯</button>' : '';
   const hideBtn = isAdmin(session.role) ? (n.hidden ? '<button class="btn btn-ghost btn-sm" onclick="doUnhide(\''+n.id+'\')">↩ 取消隱藏</button>' : '<button class="btn btn-ghost btn-sm" onclick="doHide(\''+n.id+'\')">🙈 隱藏</button>') : '';
   const delBtn = isAdmin(session.role) ? '<button class="btn btn-warn btn-sm" onclick="doDelete(\''+n.id+'\')">🗑 刪除</button>' : '';
@@ -1083,7 +1093,7 @@ async function shareUnread(){
 }
 
 /* ====== 文件下載目錄 ====== */
-let _docs=[], _docCat='';
+let _docs=[], _docCat='', _docQ='';
 function docIcon(d){
   if(d.kind==='link')return '🔗';
   const m=(d.mime||'')+' '+(d.name||'');
@@ -1110,12 +1120,23 @@ async function openDocs(){
     if(document.getElementById('modalRoot').innerHTML.trim()) renderDocs();
   }catch(e){ if(e!=='AUTH'&&!shown){closeModal();toast('載入失敗');} }
 }
-function renderDocs(){
+function docMatch(d,q){
+  if(!q)return true;
+  const hay=((d.name||'')+' '+(d.category||'')+' '+(d.note||'')+' '+(d.created_by_name||'')+' '+(d.created_at||'')).toLowerCase();
+  return q.toLowerCase().split(/\s+/).filter(Boolean).every(w=>hay.indexOf(w)>=0);
+}
+function onDocSearch(){
+  _docQ=document.getElementById('docSearch').value.trim();
+  renderDocs(true);
+}
+function clearDocSearch(){ _docQ=''; _docCat=''; renderDocs(); }
+function renderDocs(keepFocus){
   const root=document.getElementById('modalRoot');
-  const cats={}; _docs.forEach(d=>{const c=d.category||'其他';cats[c]=(cats[c]||0)+1;});
-  let chips='<button class="catchip'+(_docCat===''?' on':'')+'" onclick="setDocCat(\'\')">全部 '+_docs.length+'</button>';
+  const hit=_docs.filter(d=>docMatch(d,_docQ));          // 先套關鍵字,分類數量才會跟著變
+  const cats={}; hit.forEach(d=>{const c=d.category||'其他';cats[c]=(cats[c]||0)+1;});
+  let chips='<button class="catchip'+(_docCat===''?' on':'')+'" onclick="setDocCat(\'\')">全部 '+hit.length+'</button>';
   chips+=Object.keys(cats).map(c=>'<button class="catchip'+(_docCat===c?' on':'')+'" onclick="setDocCat(\''+c+'\')">'+esc(c)+' '+cats[c]+'</button>').join('');
-  const list=_docCat?_docs.filter(d=>(d.category||'其他')===_docCat):_docs;
+  const list=_docCat?hit.filter(d=>(d.category||'其他')===_docCat):hit;
   const rows=list.map(d=>{
     const canDel = isAdmin(session.role) || idEq(d.created_by, session.staff_id);
     return '<div class="doc-row"><span class="ic">'+docIcon(d)+'</span>'+
@@ -1125,14 +1146,20 @@ function renderDocs(){
       '<a class="dl" href="'+esc(d.view||d.url)+'" target="_blank" rel="noopener">開啟</a>'+
       (canDel?'<button class="btn btn-warn btn-sm" onclick="doDelDoc(\''+d.id+'\')">🗑</button>':'')+
       '</div>';
-  }).join('')||'<div class="empty">這個分類還沒有文件</div>';
+  }).join('')||'<div class="empty">'+(_docQ?'找不到符合「'+esc(_docQ)+'」的文件':'這個分類還沒有文件')+'</div>';
   const logBtn = isAdmin(session.role)?'<button class="mic" type="button" onclick="openDocLogs()">📜 異動紀錄</button>':'';
   root.innerHTML='<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">'+
     '<button class="x" onclick="closeModal()">×</button><h2>文件下載</h2>'+
     '<div class="mmeta">班表、表單、SOP、ISO 等常用文件,隨時取用(不會過期)</div>'+
     '<div style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;">'+
-      '<button class="btn btn-pri btn-sm" onclick="openDocAdd()">＋ 上傳文件</button>'+logBtn+'</div>'+
+      '<button class="btn btn-pri btn-sm" onclick="openDocAdd()">＋ 上傳文件</button>'+logBtn+
+      (_docQ||_docCat?'<button class="mic" type="button" onclick="clearDocSearch()">清除</button>':'')+'</div>'+
+    '<input id="docSearch" class="search" placeholder="🔍 找文件:名稱、分類、備註、上傳者…" value="'+esc(_docQ)+'" oninput="onDocSearch()">'+
     '<div class="catchips">'+chips+'</div>'+rows+'</div></div>';
+  if(keepFocus){                                  // 打字時維持游標,不中斷輸入
+    const el=document.getElementById('docSearch');
+    if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); }
+  }
 }
 function setDocCat(c){ _docCat=c; renderDocs(); }
 
