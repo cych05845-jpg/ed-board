@@ -309,7 +309,7 @@ async function acctApi(action, body){
 function acctGet(){ try{ const a=JSON.parse(localStorage.getItem(ACCT_KEY)||'null'); return (a&&a.token&&a.exp>Date.now())?a:null; }catch(e){ return null; } }
 function acctSet(a){ try{ a?localStorage.setItem(ACCT_KEY,JSON.stringify(a)):localStorage.removeItem(ACCT_KEY); }catch(e){} }
 function acctClear(){ acctSet(null); try{ localStorage.removeItem('edboard_session'); }catch(e){} }
-function openAccountCenter(){ window.open(ACCOUNT_PAGE+'?back='+encodeURIComponent(location.href.split('#')[0]),'_blank'); }
+function openAccountCenter(){ location.href=ACCOUNT_PAGE; }   // 同頁切換(APP 模式也能開)。不帶 ?back=:已登入時帳號中心會立刻跳回,看不到管理頁
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function nl2br(s){
   // 先 escape,再把換行變 <br>,最後把 URL 變可點連結
